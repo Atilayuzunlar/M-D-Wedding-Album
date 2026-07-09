@@ -204,52 +204,58 @@ else:
         st.markdown('</div>', unsafe_allow_html=True)
 
     # FOTOĞRAF YÜKLEME
-    elif st.session_state.active_page == "upload":
-        st.markdown('<div class="glass-card">', unsafe_allow_html=True)
-        st.markdown('<h3 class="card-title">📸 Fotoğraf Paylaş</h3>', unsafe_allow_html=True)
-        
-        c_mode1, c_mode2 = st.columns(2)
-        with c_mode1:
-            if st.button("📷 Anlık Fotoğraf Çek", key="choose_cam"):
-                st.session_state.upload_method = "camera"
-                st.rerun()
-        with c_mode2:
-            if st.button("📁 Galeriden Fotoğraf Seç", key="choose_gal"):
-                st.session_state.upload_method = "gallery"
-                st.rerun()
-        
-        target_bytes = None
-        st.markdown('<div style="margin-top: 25px; margin-bottom: 25px;">', unsafe_allow_html=True)
-        
-        if st.session_state.upload_method == "camera":
-            st.markdown('<p style="text-align:center; font-weight:bold; font-size:1.1rem; margin-bottom:10px;">📸 Kameranız Aktif:</p>', unsafe_allow_html=True)
-            camera_file = st.camera_input("Fotoğrafınızı Çekinin:")
-            if camera_file: target_bytes = camera_file.read()
-        else:
-            st.markdown('<p style="text-align:center; font-weight:bold; font-size:1.1rem; margin-bottom:10px;">📁 Galeri Dosya Seçici Aktif:</p>', unsafe_allow_html=True)
-            uploaded_file = st.file_uploader("Galeriden Görsel Seçin:", type=["JPG", "png", "jpeg"])
-            if uploaded_file: target_bytes = uploaded_file.read()
-        st.markdown('</div>', unsafe_allow_html=True)
-        
-        if target_bytes is not None:
-            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-            file_name = f"{st.session_state.user_name.replace(' ', '_')}_{timestamp}.JPG"
-            with st.spinner("Anınız işleniyor ve Google Drive'a yükleniyor..."):
-                if drive_service is not None:
-                    try:
-                        file_metadata = {
-                            'name': file_name,
-                            'parents': [DRIVE_FOLDER_ID] if DRIVE_FOLDER_ID and DRIVE_FOLDER_ID != "YOUR_GOOGLE_DRIVE_FOLDER_ID_HERE" else []
-                        }
-                        media = MediaIoBaseUpload(io.BytesIO(target_bytes), mimetype='image/jpeg', resumable=True)
-                        drive_file = drive_service.files().create(body=file_metadata, media_body=media, fields='id').execute()
-                        
-                        st.session_state.db.append({"uploader": st.session_state.user_name, "bytes": target_bytes})
-                        save_db(st.session_state.db)
-                        st.success("🎉 Fotoğraf başarıyla Drive albümüne eklendi!")
-                    except Exception as e:
-                        st.error(f"Drive yükleme hatası: {e}")
-        st.markdown('</div>', unsafe_allow_html=True)
+# ==========================================
+# FOTOĞRAF ÇEKME VE GOOGLE DRIVE'A YÜKLEME ALANI
+# ==========================================
+
+st.markdown("### 📸 Mustafa & Dilruba İçin Bir Anı Bırakın")
+
+# Hem kameradan anlık çekim hem de galeriden dosya yükleme opsiyonu sunuyoruz
+uploaded_file = st.camera_input("Fotoğrafınızı Çekin")
+gallery_file = st.file_uploader("Veya Galeriden Bir Fotoğraf Seçin", type=["jpg", "jpeg", "png"])
+
+# Eğer kullanıcı ikisinden birini seçtiyse veya çektiyse tetiklenir
+active_file = uploaded_file if uploaded_file is not None else gallery_file
+
+if active_file is not None:
+    # 🌟 BURASI KRİTİK: NameError almamak için servisi tam yükleme anında çağırıp hafızaya alıyoruz
+    drive_service = get_drive_service()
+    
+    if drive_service is not None:
+        with st.spinner("Fotoğrafınız düğün albümüne yükleniyor, lütfen bekleyin... ⏳"):
+            try:
+                from googleapiclient.http import MediaIoBaseUpload
+                import io
+                
+                # Dosya adını benzersiz yapmak için zaman damgası ekliyoruz
+                import time
+                file_name = f"dugun_{int(time.time())}.jpg"
+                
+                # Google Drive metadata hazırlığı (FOLDER_ID'nin yukarıda tanımlı olduğundan emin ol)
+                file_metadata = {
+                    'name': file_name,
+                    'parents': [FOLDER_ID] if 'FOLDER_ID' in globals() else []
+                }
+                
+                # Dosyayı binary akışına çeviriyoruz
+                file_bytes = io.BytesIO(active_file.read())
+                media = MediaIoBaseUpload(file_bytes, mimetype='image/jpeg', resumable=True)
+                
+                # 🚀 Google Drive'a yükleme emri fırlatılıyor
+                uploaded_drive_file = drive_service.files().create(
+                    body=file_metadata,
+                    media_body=media,
+                    fields='id'
+                ).execute()
+                
+                st.success("🎉 Harika! Fotoğrafınız başarıyla Mustafa & Dilruba albümüne eklendi. Çok teşekkür ederiz!")
+                st.balloons() # Ekranda tatlı balonlar uçuşsun
+                
+            except Exception as e:
+                st.error(f"⚠️ Yükleme sırasında bir hata oluştu: {e}")
+                st.info("Lütfen internet bağlantınızı kontrol edip tekrar deneyin.")
+    else:
+        st.error("❌ Google Drive bağlantısı şu an kurulamıyor! Lütfen 'token.pickle' dosyasını kontrol edin.")
 
     # FOTOĞRAF ARAMA MOTORU
     elif st.session_state.active_page == "find_me":
