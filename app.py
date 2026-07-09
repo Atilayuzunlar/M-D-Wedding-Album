@@ -65,11 +65,13 @@ def get_base64_encoded_image(image_path):
     return None
 
 # --- CSS YAPILANDIRMASI (FOTOĞRAFLARI NETLEŞTİREN GÜNCEL SÜRÜM) ---
+# --- CSS YAPILANDIRMASI (FOTOĞRAFLARI NETLEŞTİREN GÜNCEL SÜRÜM) ---
 bg_css_steps = ""
 images_b64 = []
 for i in range(1, 10):
     b64_str = get_base64_encoded_image(f"cift_{i}.JPG")
-    if b64_str: images_b64.append(b64_str)
+    if b64_str:
+        images_b64.append(b64_str)
 
 if images_b64:
     total_imgs = len(images_b64)
@@ -78,7 +80,7 @@ if images_b64:
     for idx, b64 in enumerate(images_b64):
         start = idx * step_pct
         mid = ((idx + 1) * step_pct) - 1
-       bg_css_steps += f"  {{start}}%, {{mid}}% {{ background-image: url('data:image/jpeg;base64,{b64}'); }}\n"
+        bg_css_steps += f"  {start}%, {mid}% {{ background-image: url('data:image/jpeg;base64,{b64}'); }}\n"
     bg_css_steps += "}"
 
 st.markdown(f"""
