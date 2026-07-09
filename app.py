@@ -5,6 +5,7 @@ import io
 import numpy as np
 import datetime
 import base64
+import time
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 
@@ -77,7 +78,7 @@ if images_b64:
     for idx, b64 in enumerate(images_b64):
         start = idx * step_pct
         mid = ((idx + 1) * step_pct) - 1
-        bg_css_steps += f"  {start}%, {mid}% {{ background-image: url('data:image/jpeg;base64,{b64}'); }}\n"
+        bg_css_steps += f"  start}%, {mid}% {{ background-image: url('data:image/jpeg;base64,{b64}'); }}\n"
     bg_css_steps += "}"
 
 st.markdown(f"""
@@ -196,68 +197,59 @@ else:
     st.markdown('<div class="main-title">💕 Mustafa & Dilruba 💕</div>', unsafe_allow_html=True)
     st.markdown(f'<div class="top-subtitle">Hoş Geldin, {st.session_state.user_name}!</div>', unsafe_allow_html=True)
 
-    # HOME SAYFASI
+    # 🏠 ANA SAYFA (HOME)
     if st.session_state.active_page == "home":
         st.markdown('<div class="glass-card" style="text-align: center;">', unsafe_allow_html=True)
         st.markdown('<h3 class="card-title">Bizim Hikayemiz</h3>', unsafe_allow_html=True)
-        st.markdown('<p style="font-style: italic; line-height: 1.8;">"Bir ömür boyu sürecek masalımızın en özel gününe hoş geldiniz. Fotoğraflarınızı paylaşmak ve dijital anı defterimize katkıda bulunmak için alttaki menüyü kullanabilirsiniz."</p>', unsafe_allow_html=True)
+        st.markdown('<p style="font-style: italic; line-height: 1.8;">"Bir ömür boyu sürecek masalımızın en özel gününe hoş geldiniz. Fotoğraflarınızı paylaşmak ve dijital anı devterimize katkıda bulunmak için alttaki menüyü kullanabilirsiniz."</p>', unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
-    # FOTOĞRAF YÜKLEME
-# ==========================================
-# FOTOĞRAF ÇEKME VE GOOGLE DRIVE'A YÜKLEME ALANI
-# ==========================================
+    # 📸 FOTOĞRAF YÜKLEME SAYFASI (UPLOAD)
+    elif st.session_state.active_page == "upload":
+        st.markdown("### 📸 Mustafa & Dilruba İçin Bir Anı Bırakın")
+        
+        uploaded_file = st.camera_input("Fotoğrafınızı Çekin")
+        gallery_file = st.file_uploader("Veya Galeriden Bir Fotoğraf Seçin", type=["jpg", "jpeg", "png"])
+        
+        active_file = uploaded_file if uploaded_file is not None else gallery_file
+        
+        if active_file is not None:
+            # 🌟 NameError ve bağlantı kopmasını önlemek için tam burada çağırıyoruz:
+            drive_service = get_drive_service()
+            
+            if drive_service is not None:
+                with st.spinner("Fotoğrafınız düğün albümüne yükleniyor, lütfen bekleyin... ⏳"):
+                    try:
+                        from googleapiclient.http import MediaIoBaseUpload
+                        import io
+                        
+                        file_name = f"dugun_{int(time.time())}.jpg"
+                        
+                        file_metadata = {
+                            'name': file_name,
+                            'parents': [DRIVE_FOLDER_ID]
+                        }
+                        
+                        file_bytes = io.BytesIO(active_file.read())
+                        media = MediaIoBaseUpload(file_bytes, mimetype='image/jpeg', resumable=True)
+                        
+                        # 🚀 Google Drive'a güvenle gönderiliyor
+                        uploaded_drive_file = drive_service.files().create(
+                            body=file_metadata,
+                            media_body=media,
+                            fields='id'
+                        ).execute()
+                        
+                        st.success("🎉 Harika! Fotoğrafınız başarıyla Mustafa & Dilruba albümüne eklendi. Çok teşekkür ederiz!")
+                        st.balloons()
+                        
+                    except Exception as e:
+                        st.error(f"⚠️ Yükleme sırasında bir hata oluştu: {e}")
+                        st.info("Lütfen internet bağlantınızı kontrol edip tekrar deneyin.")
+            else:
+                st.error("❌ Google Drive bağlantısı şu an kurulamıyor! Lütfen 'token.pickle' dosyasını kontrol edin.")
 
-st.markdown("### 📸 Mustafa & Dilruba İçin Bir Anı Bırakın")
-
-# Hem kameradan anlık çekim hem de galeriden dosya yükleme opsiyonu sunuyoruz
-uploaded_file = st.camera_input("Fotoğrafınızı Çekin")
-gallery_file = st.file_uploader("Veya Galeriden Bir Fotoğraf Seçin", type=["jpg", "jpeg", "png"])
-
-# Eğer kullanıcı ikisinden birini seçtiyse veya çektiyse tetiklenir
-active_file = uploaded_file if uploaded_file is not None else gallery_file
-
-if active_file is not None:
-    # 🌟 BURASI KRİTİK: NameError almamak için servisi tam yükleme anında çağırıp hafızaya alıyoruz
-    drive_service = get_drive_service()
-    
-    if drive_service is not None:
-        with st.spinner("Fotoğrafınız düğün albümüne yükleniyor, lütfen bekleyin... ⏳"):
-            try:
-                from googleapiclient.http import MediaIoBaseUpload
-                import io
-                
-                # Dosya adını benzersiz yapmak için zaman damgası ekliyoruz
-                import time
-                file_name = f"dugun_{int(time.time())}.jpg"
-                
-                # Google Drive metadata hazırlığı (FOLDER_ID'nin yukarıda tanımlı olduğundan emin ol)
-                file_metadata = {
-                    'name': file_name,
-                    'parents': [FOLDER_ID] if 'FOLDER_ID' in globals() else []
-                }
-                
-                # Dosyayı binary akışına çeviriyoruz
-                file_bytes = io.BytesIO(active_file.read())
-                media = MediaIoBaseUpload(file_bytes, mimetype='image/jpeg', resumable=True)
-                
-                # 🚀 Google Drive'a yükleme emri fırlatılıyor
-                uploaded_drive_file = drive_service.files().create(
-                    body=file_metadata,
-                    media_body=media,
-                    fields='id'
-                ).execute()
-                
-                st.success("🎉 Harika! Fotoğrafınız başarıyla Mustafa & Dilruba albümüne eklendi. Çok teşekkür ederiz!")
-                st.balloons() # Ekranda tatlı balonlar uçuşsun
-                
-            except Exception as e:
-                st.error(f"⚠️ Yükleme sırasında bir hata oluştu: {e}")
-                st.info("Lütfen internet bağlantınızı kontrol edip tekrar deneyin.")
-    else:
-        st.error("❌ Google Drive bağlantısı şu an kurulamıyor! Lütfen 'token.pickle' dosyasını kontrol edin.")
-
-    # FOTOĞRAF ARAMA MOTORU
+    # 🔍 YAPAY ZEKA FOTOĞRAF ARAMA MOTORU (FIND ME)
     elif st.session_state.active_page == "find_me":
         st.markdown('<div class="glass-card">', unsafe_allow_html=True)
         st.markdown('<h3 class="card-title">🔍 Yapay Zeka ile Kendini Bul</h3>', unsafe_allow_html=True)
@@ -279,7 +271,7 @@ if active_file is not None:
                     st.info("Albümde henüz fotoğraf bulunamadı. Önce 'Fotoğraf At' kısmından bir şeyler yükleyin.")
         st.markdown('</div>', unsafe_allow_html=True)
 
-    # PROGRAM SAYFASI
+    # 📋 PROGRAM SAYFASI
     elif st.session_state.active_page == "program":
         st.markdown('<div class="glass-card">', unsafe_allow_html=True)
         st.markdown('<h3 class="card-title">✨ Düğün Akış Programı ✨</h3>', unsafe_allow_html=True)
@@ -295,7 +287,7 @@ if active_file is not None:
         """, unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
-    # SABİT ALT NAVİGASYON BARI
+    # 📱 SABİT MOBİL NAVİGASYON BARI
     st.markdown('<div class="mobile-nav-bar">', unsafe_allow_html=True)
     c1, c2, c3, c4 = st.columns(4)
     with c1:
