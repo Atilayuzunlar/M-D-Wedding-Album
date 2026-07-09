@@ -78,7 +78,7 @@ if images_b64:
     for idx, b64 in enumerate(images_b64):
         start = idx * step_pct
         mid = ((idx + 1) * step_pct) - 1
-        bg_css_steps += f"  {start}%, {mid}% {{ background-image: url('data:image/jpeg;base64,{b64}'); }}\n"
+        bg_css_steps += f"  {{start}%, {mid}% {{ background-image: url('data:image/jpeg;base64,{b64}'); }}\n"
     bg_css_steps += "}"
 
 st.markdown(f"""
