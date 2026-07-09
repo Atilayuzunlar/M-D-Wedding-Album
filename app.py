@@ -67,7 +67,7 @@ def get_base64_encoded_image(image_path):
 bg_css_steps = ""
 images_b64 = []
 for i in range(1, 10):
-    b64_str = get_base64_encoded_image(f"cift_{i}.jpg")
+    b64_str = get_base64_encoded_image(f"cift_{i}.JPG")
     if b64_str: images_b64.append(b64_str)
 
 if images_b64:
@@ -227,13 +227,13 @@ else:
             if camera_file: target_bytes = camera_file.read()
         else:
             st.markdown('<p style="text-align:center; font-weight:bold; font-size:1.1rem; margin-bottom:10px;">📁 Galeri Dosya Seçici Aktif:</p>', unsafe_allow_html=True)
-            uploaded_file = st.file_uploader("Galeriden Görsel Seçin:", type=["jpg", "png", "jpeg"])
+            uploaded_file = st.file_uploader("Galeriden Görsel Seçin:", type=["JPG", "png", "jpeg"])
             if uploaded_file: target_bytes = uploaded_file.read()
         st.markdown('</div>', unsafe_allow_html=True)
         
         if target_bytes is not None:
             timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-            file_name = f"{st.session_state.user_name.replace(' ', '_')}_{timestamp}.jpg"
+            file_name = f"{st.session_state.user_name.replace(' ', '_')}_{timestamp}.JPG"
             with st.spinner("Anınız işleniyor ve Google Drive'a yükleniyor..."):
                 if drive_service is not None:
                     try:
