@@ -70,6 +70,8 @@ if "user_name" not in st.session_state: st.session_state.user_name = ""
 if "active_page" not in st.session_state: st.session_state.active_page = "home"
 if "upload_method" not in st.session_state: st.session_state.upload_method = "camera"
 if "bg_index" not in st.session_state: st.session_state.bg_index = 1
+# 🌟 Kopyalama / önbellek kilitlenmesini çözmek için dinamik form anahtarı:
+if "uploader_key" not in st.session_state: st.session_state.uploader_key = str(int(time.time()))
 
 # --- FOTOĞRAFLARIN VARLIĞINI KONTROL ETME ---
 valid_images = []
@@ -181,7 +183,7 @@ st.markdown(f"""
         z-index: -10;
     }}
     
-    /* 🌟 FOTOĞRAFI EKRANIN EN ARKASINA ÇİVİLEYEN ÖZEL SLAYTSHOW SINIFI (Diğer st.image'leri etkilemez) */
+    /* 🌟 FOTOĞRAFI EKRANIN EN ARKASINA ÇİVİLEYEN ÖZEL SLAYTSHOW SINIFI */
     .bg-slideshow-img {{
         position: fixed !important;
         top: 0 !important;
@@ -203,7 +205,7 @@ st.markdown(f"""
     </style>
 """, unsafe_allow_html=True)
 
-# 🌟 SADECE BELİRLENEN SINIFLA EN ARKA PLAN SLAYTI YAPILIYOR
+# 🌟 ARKA PLAN SLAYTI
 if active_bg_b64:
     st.markdown(f'<img src="data:image/jpeg;base64,{active_bg_b64}" class="bg-slideshow-img">', unsafe_allow_html=True)
     st.markdown('<div class="bg-mask"></div>', unsafe_allow_html=True)
@@ -241,61 +243,90 @@ else:
     elif st.session_state.active_page == "upload":
         st.markdown("### 📸 Mustafa & Dilruba İçin Bir Anı Bırakın")
         
-        uploaded_file = st.camera_input("Fotoğrafınızı Çekin")
-        gallery_file = st.file_uploader("Veya Galeriden Bir Fotoğraf Seçin", type=["jpg", "jpeg", "png"])
+        # 🌟 Kameradan tekil anlık çekim
+        uploaded_file = st.camera_input("Fotoğrafınızı Çekin", key=f"cam_{st.session_state.uploader_key}")
         
-        active_file = uploaded_file if uploaded_file is not None else gallery_file
+        # 🌟 Galeriden ÇOKLU (accept_multiple_files=True) dosya yükleyici
+        gallery_files = st.file_uploader(
+            "Veya Galeriden Fotoğraflar Seçin (Çoklu Seçebilirsiniz)", 
+            type=["jpg", "jpeg", "png"], 
+            accept_multiple_files=True,
+            key=f"gallery_{st.session_state.uploader_key}"
+        )
         
-        if active_file is not None:
+        # Dosyaları tek bir havuzda birleştiriyoruz
+        files_to_upload = []
+        if uploaded_file is not None:
+            files_to_upload.append(uploaded_file)
+        if gallery_files:
+            files_to_upload.extend(gallery_files)
+        
+        if len(files_to_upload) > 0:
             drive_service = get_drive_service()
             
             if drive_service is not None:
-                with st.spinner("Fotoğrafınız düğün albümüne yükleniyor, lütfen bekleyin... ⏳"):
+                with st.spinner(f"{len(files_to_upload)} Fotoğraf düğün albümüne yükleniyor... ⏳"):
                     try:
                         from googleapiclient.http import MediaIoBaseUpload
                         import io
                         
-                        file_bytes = active_file.read()
-                        file_name = f"dugun_{int(time.time())}.jpg"
+                        success_count = 0
                         
-                        # 1. GOOGLE DRIVE'A YÜKLEME
-                        file_metadata = {
-                            'name': file_name,
-                            'parents': [DRIVE_FOLDER_ID]
-                        }
+                        for idx, active_file in enumerate(files_to_upload):
+                            # Her dosyanın byte verisini bağımsız okuyoruz (Kopyalama / Klonlama koruması)
+                            file_bytes = active_file.read()
+                            
+                            # Her dosyaya benzersiz zaman damgası ve milisaniye ekleniyor
+                            unique_id = int(time.time() * 1000) + idx
+                            file_name = f"dugun_{unique_id}.jpg"
+                            
+                            # 1. GOOGLE DRIVE'A YÜKLEME
+                            file_metadata = {
+                                'name': file_name,
+                                'parents': [DRIVE_FOLDER_ID]
+                            }
+                            
+                            file_stream = io.BytesIO(file_bytes)
+                            media = MediaIoBaseUpload(file_stream, mimetype='image/jpeg', resumable=True)
+                            
+                            uploaded_drive_file = drive_service.files().create(
+                                body=file_metadata,
+                                media_body=media,
+                                fields='id'
+                            ).execute()
+                            
+                            # 2. AI VERİTABANINA YAZMA
+                            new_record = {
+                                "name": file_name,
+                                "bytes": file_bytes,
+                                "uploaded_by": st.session_state.user_name,
+                                "timestamp": datetime.datetime.now()
+                            }
+                            st.session_state.db.append(new_record)
+                            success_count += 1
                         
-                        file_stream = io.BytesIO(file_bytes)
-                        media = MediaIoBaseUpload(file_stream, mimetype='image/jpeg', resumable=True)
-                        
-                        uploaded_drive_file = drive_service.files().create(
-                            body=file_metadata,
-                            media_body=media,
-                            fields='id'
-                        ).execute()
-                        
-                        # 2. AI VERİTABANINA YAZMA
-                        new_record = {
-                            "name": file_name,
-                            "bytes": file_bytes,
-                            "uploaded_by": st.session_state.user_name,
-                            "timestamp": datetime.datetime.now()
-                        }
-                        
-                        st.session_state.db.append(new_record)
+                        # Toplu veritabanı kaydı
                         save_db(st.session_state.db)
                         
-                        # 🌟 DÜZELTİLEN YENİ BAŞARI ANİMASYONU VE ŞIK CELEBRATION KARTI
-                        st.markdown("""
-                            <div style="background: rgba(255, 255, 255, 0.95); border-radius: 20px; padding: 20px; text-align: center; border: 2px solid #D98880; box-shadow: 0 10px 25px rgba(217, 136, 128, 0.2); margin-top: 15px; animation: bounce 1s ease;">
+                        # Başarılı yüklemeden sonra widget hafızasını sıfırlıyoruz:
+                        st.session_state.uploader_key = str(int(time.time() * 1000))
+                        
+                        # 🌟 Tebrik Kartı Efekti
+                        st.markdown(f"""
+                            <div style="background: rgba(255, 255, 255, 0.95); border-radius: 20px; padding: 20px; text-align: center; border: 2px solid #D98880; box-shadow: 0 10px 25px rgba(217, 136, 128, 0.2); margin-top: 15px;">
                                 <span style="font-size: 3rem;">🎉</span>
-                                <h4 style="color: #D98880 !important; font-weight: 800; margin-top: 10px;">Harika! Fotoğrafınız Yüklendi</h4>
-                                <p style="font-size: 1.1rem !important; color: #7D4643 !important; font-weight: 600;">Mustafa & Dilruba albümüne çok şık bir anı bıraktınız. Çok teşekkür ederiz!</p>
+                                <h4 style="color: #D98880 !important; font-weight: 800; margin-top: 10px;">Harika! {success_count} Fotoğraf Yüklendi</h4>
+                                <p style="font-size: 1.1rem !important; color: #7D4643 !important; font-weight: 600;">Anılarınız başarıyla Mustafa & Dilruba albümüne eklendi. Çok teşekkür ederiz!</p>
                             </div>
                         """, unsafe_allow_html=True)
+                        st.balloons()
+                        
+                        # Sayfayı tazeleyip widget'ları tamamen sıfırlıyoruz:
+                        time.sleep(1.5)
+                        st.rerun()
                         
                     except Exception as e:
                         st.error(f"⚠️ Yükleme sırasında bir hata oluştu: {e}")
-                        st.info("Lütfen internet bağlantınızı kontrol edip tekrar deneyin.")
             else:
                 st.error("❌ Google Drive bağlantısı şu an kurulamıyor! Lütfen 'token.pickle' dosyasını kontrol edin.")
 
@@ -315,15 +346,11 @@ else:
                     if valid_photos:
                         st.success(f"📸 Sizin olduğunuz {len(valid_photos)} anı yakalandı!")
                         
-                        # Bulunan her fotoğrafı ekrana ve indirme butonunun üstüne basıyoruz
                         for idx, photo_bytes in enumerate(valid_photos):
-                            # Byte verisini HTML'de doğrudan gösterebilmek için Base64'e çeviriyoruz
                             photo_b64 = base64.b64encode(photo_bytes).decode()
                             
-                            # 🌟 İndirme butonunun üstünde görseli şık sınıfıyla sabit olarak basıyoruz
                             st.markdown(f'<img src="data:image/jpeg;base64,{photo_b64}" class="ai-found-photo">', unsafe_allow_html=True)
                             
-                            # Hemen altına indirme butonu
                             st.download_button(
                                 label="📥 Fotoğrafı İndir",
                                 data=photo_bytes,
