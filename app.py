@@ -147,7 +147,7 @@ def compare_biyometric_vectors(vector1, vector2):
     similarity = dot_product / (norm_a * norm_b)
     return 1.0 - similarity
 
-# --- CSS YAPILANDIRMASI (HAYALET ÇİZGİLER SIFIRLANDI) ---
+# --- CSS YAPILANDIRMASI ---
 st.markdown(f"""
     <style>
     [data-testid="stAppViewContainer"], .stApp, [data-testid="stApp"], 
@@ -163,7 +163,6 @@ st.markdown(f"""
         height: 0px !important;
     }}
     
-    /* 🌟 INATÇI BEYAZ BARLARI, ÇİZGİLERİ VE HAYALET KUTULARI TAMAMEN İMHA EDEN BLOK */
     hr, [data-testid="stSeparator"], .stDivider {{
         display: none !important;
         border: none !important;
@@ -273,7 +272,6 @@ if st.session_state.user_name == "":
     st.markdown('<div class="main-title">💕 Mustafa & Dilruba 💕</div>', unsafe_allow_html=True)
     st.markdown('<div class="top-subtitle">Sonsuz Mutluluğa Adım Atarken...</div>', unsafe_allow_html=True)
     
-    # KOPUK ETİKETLER BİRLEŞTİRİLDİ (Hayalet div önlendi)
     st.markdown("""
     <div class="glass-card">
         <div class="couple-message">"Hayatımızın en özel gününde yanımızda olduğunuz için çok mutluyuz..."<br><br><span style="color: #D98880; font-weight: bold;">- Dilruba & Mustafa</span></div>
@@ -296,7 +294,6 @@ else:
 
     # 🏠 ANA SAYFA
     if st.session_state.active_page == "home":
-        # Bütünleşik güvenli blok
         st.markdown("""
         <div class="glass-card" style="text-align: center;">
             <h3 class="card-title">Bizim Hikayemiz</h3>
@@ -389,7 +386,6 @@ else:
 
     # 🔍 YAPAY ZEKA FOTOĞRAP ARAMA MOTORU
     elif st.session_state.active_page == "find_me":
-        # Güvenli bütünleşik div
         st.markdown("""
         <div class="glass-card">
             <h3 class="card-title">🔍 Yapay Zeka ile Kendini Bul</h3>
@@ -482,12 +478,11 @@ else:
                                             mime="image/jpeg",
                                             key=f"download_{idx}"
                                         )
-                                        # Streamlit çizgi oluşturmasın diye görünmez boşluk kullanıldı
                                         st.markdown('<div style="margin-bottom: 25px;"></div>', unsafe_allow_html=True)
                                     except Exception as err:
                                         pass
                             else:
-                                st.info("Düğün albümünde size ait bir fotoğraf bulunamadı. Başka bir ortamda veya daha aydınlık bir açıda tekrar poz vermeyi deneyebilirsiniz!")
+                                st.info("Düğün albümünde size ait bir fotoğraf bulunamadı. Başka bir açıyla tekrar poz vermeyi deneyebilirsiniz!")
                         else:
                             st.warning("⚠️ Biyometrik analiz başarısız oldu. Lütfen daha aydınlık bir ortamda tekrar poz verin.")
                             
@@ -499,17 +494,18 @@ else:
 
     # 📋 PROGRAM SAYFASI
     elif st.session_state.active_page == "program":
-        # Güvenli HTML yapısı
+        # 🌟 YENİ GÜNCEL AKIŞ SAATLERİ BURAYA İŞLENDİ
         st.markdown("""
         <div class="glass-card">
             <h3 class="card-title">✨ Düğün Akış Programı ✨</h3>
             <div style="font-size: 1.3rem !important; line-height: 2.2; font-weight: 700;">
-                <p><b>19:00 - 19:30 :</b> Misafirlerin Karşılanması & Kokteyl</p>
-                <p style="font-weight:900;"><b>19:30 - 20:00 :</b> Gelin & Damat Girişi ve İlk Dans 💕</p>
-                <p><b>20:00 - 21:30 :</b> Akşam Yemeği Müziği</p>
-                <p style="font-weight:900;"><b>21:30 - 22:00 :</b> Pasta Kesimi & Takı Merasimi</p>
-                <p><b>22:00 - 23:45 :</b> Eğlence, Dans & After Party 🥳</p>
-                <p><b>23:45 - 00:00 :</b> Kapanış & Teşekkür Konuşması</p>
+                <p><b>18:45 :</b> Gelin Odası Çıkış 👰‍♀️🤵‍♂️</p>
+                <p style="font-weight:900;"><b>19:00 - 19:15 :</b> Nikah Merasimi ✍️</p>
+                <p><b>19:15 - 20:00 :</b> İlk Dans & Canlı Müzik 💕</p>
+                <p style="font-weight:900;"><b>20:00 - 20:30 :</b> Takı Merasimi 🎁</p>
+                <p><b>20:30 - 21:00 :</b> Yemek Dağıtımı 🍽️</p>
+                <p style="font-weight:900;"><b>21:00 - 22:45 :</b> Kesintisiz Eğlence & Dans 🥳</p>
+                <p><b>22:45 :</b> Kapanış & Teşekkürler ✨</p>
             </div>
         </div>
         """, unsafe_allow_html=True)
