@@ -117,11 +117,9 @@ active_bg_b64 = get_base64_encoded_image(active_bg_image) if active_bg_image els
 def extract_pure_biyometric_vector(image_bytes):
     try:
         img = Image.open(io.BytesIO(image_bytes)).convert('RGB')
-        # Daha detaylı analiz için çözünürlüğü 128x128 yapıyoruz
         img_resized = img.resize((128, 128))
         img_np = np.array(img_resized, dtype=np.float32)
         
-        # 1. Gelişmiş Cilt Rengi Segmentasyonu
         r = img_np[:, :, 0]
         g = img_np[:, :, 1]
         b = img_np[:, :, 2]
@@ -129,7 +127,6 @@ def extract_pure_biyometric_vector(image_bytes):
         skin_mask = (r > 95) & (g > 40) & (b > 20) & ((r - g) > 15) & (r > g) & (r > b)
         skin_vector = np.where(skin_mask, 1.0, 0.0).flatten()
         
-        # 2. Aydınlık / Kontur Haritası
         gray_img = img_resized.convert('L')
         gray_np = np.array(gray_img, dtype=np.float32) / 255.0
         shadow_vector = gray_np.flatten()
@@ -150,8 +147,7 @@ def compare_biyometric_vectors(vector1, vector2):
     similarity = dot_product / (norm_a * norm_b)
     return 1.0 - similarity
 
-# --- CSS ---
-# --- CSS YAPILANDIRMASI ---
+# --- CSS YAPILANDIRMASI (HAYALET ÇİZGİLER SIFIRLANDI) ---
 st.markdown(f"""
     <style>
     [data-testid="stAppViewContainer"], .stApp, [data-testid="stApp"], 
@@ -167,10 +163,15 @@ st.markdown(f"""
         height: 0px !important;
     }}
     
-    /* 🌟 ORTADAKİ BEYAZ ÇİZGİYİ VE TÜM VARSAYILAN KENARLIKLARI SIFIRLAYAN GÜVENLİ KISIM */
-    hr, div[data-testid="stForm"] {{
+    /* 🌟 INATÇI BEYAZ BARLARI, ÇİZGİLERİ VE HAYALET KUTULARI TAMAMEN İMHA EDEN BLOK */
+    hr, [data-testid="stSeparator"], .stDivider {{
+        display: none !important;
         border: none !important;
         background: transparent !important;
+    }}
+    
+    .element-container:empty {{
+        display: none !important;
     }}
     
     div[data-testid="stVerticalBlock"] > div {{
@@ -178,11 +179,11 @@ st.markdown(f"""
         box-shadow: none !important;
     }}
     
-    /* Streamlit'in widget'lar arasına koyduğu gri/beyaz yatay çizgileri tamamen yok et */
     [data-testid="stVerticalBlockBorderWrapper"], .st-emotion-cache-1vt4938, .st-emotion-cache-k3asqq {{
         border: none !important;
         border-width: 0px !important;
         box-shadow: none !important;
+        background: transparent !important;
     }}
     
     [data-testid="stMainBlockContainer"] {{
@@ -210,12 +211,9 @@ st.markdown(f"""
     .top-subtitle {{ text-align: center; color: #D98880 !important; font-size: 1.3rem !important; font-style: italic; margin-bottom: 20px; font-weight: 700; text-shadow: 2px 2px 4px rgba(255,255,255,1), -2px -2px 4px rgba(255,255,255,1); }}
     .card-title {{ color: #D98880 !important; font-weight: 800 !important; text-align: center; font-size: 1.6rem !important; margin-bottom: 20px; }}
     .couple-message {{ font-family: 'Georgia', serif; color: #D98880 !important; text-align: center; font-size: 1.25rem !important; font-style: italic; background-color: rgba(255, 255, 255, 0.98) !important; padding: 22px; border-radius: 15px; border-left: 6px solid #D98880; margin-bottom: 25px; font-weight: 600; line-height: 1.7; }}
-    
     p, span, label, h1, h2, h3, h4, h5, h6, .stText, .stWidgetLabel p {{ color: #D98880 !important; font-size: 1.25rem !important; font-weight: 700 !important; text-shadow: 1px 1px 2px rgba(255,255,255,0.8); }}
     .glass-card {{ background: rgba(255, 255, 255, 0.97) !important; border-radius: 24px; padding: 25px; margin-bottom: 25px; border: 1px solid rgba(210, 190, 190, 0.4); box-shadow: 0 10px 30px rgba(0,0,0,0.04); }}
-    
     [data-testid="stFileUploaderDropzone"] {{ background-color: rgba(255, 255, 255, 0.9) !important; border: 2px dashed #D98880 !important; border-radius: 16px !important; padding: 25px !important; }}
-    
     div.stButton > button {{ 
         background: linear-gradient(135deg, #9B5DE5 0%, #8338EC 100%) !important; 
         border-radius: 14px !important; 
@@ -231,7 +229,6 @@ st.markdown(f"""
         font-weight: 900 !important;
         text-shadow: none !important;
     }}
-    
     .mobile-nav-bar {{ 
         position: fixed; bottom: 0; left: 0; width: 100%; 
         background-color: #FFFFFF !important; border-top: 1px solid #EADCE6; 
@@ -242,14 +239,12 @@ st.markdown(f"""
     .mobile-nav-bar div[data-testid="column"] {{ display: flex !important; justify-content: center !important; align-items: center !important; padding: 0 !important; }}
     .mobile-nav-bar div.stButton > button {{ background: transparent !important; border: none !important; box-shadow: none !important; height: auto !important; padding: 4px 0 !important; margin: 0 !important; display: block !important; text-align: center !important; }}
     .mobile-nav-bar div.stButton > button p, .mobile-nav-bar div.stButton > button span {{ color: #7D4643 !important; font-size: 1.05rem !important; font-weight: 800 !important; }}
-    
     .bg-mask {{
         position: fixed;
         top: 0; left: 0; width: 100vw; height: 100vh;
         background-color: rgba(255, 254, 253, 0.45) !important;
         z-index: -10;
     }}
-    
     .bg-slideshow-img {{
         position: fixed !important;
         top: 0 !important;
@@ -268,16 +263,22 @@ st.markdown(f"""
     }}
     </style>
 """, unsafe_allow_html=True)
+
 if active_bg_b64:
     st.markdown(f'<img src="data:image/jpeg;base64,{active_bg_b64}" class="bg-slideshow-img">', unsafe_allow_html=True)
     st.markdown('<div class="bg-mask"></div>', unsafe_allow_html=True)
 
-# --- GİRİŞ EKRANI ---
+# --- 1. ADIM: GİRİŞ EKRANI ---
 if st.session_state.user_name == "":
     st.markdown('<div class="main-title">💕 Mustafa & Dilruba 💕</div>', unsafe_allow_html=True)
     st.markdown('<div class="top-subtitle">Sonsuz Mutluluğa Adım Atarken...</div>', unsafe_allow_html=True)
-    st.markdown('<div class="glass-card">', unsafe_allow_html=True)
-    st.markdown('<div class="couple-message">"Hayatımızın en özel gününde yanımızda olduğunuz için çok mutluyuz..."<br><br><span style="color: #D98880; font-weight: bold;">- Dilruba & Mustafa</span></div>', unsafe_allow_html=True)
+    
+    # KOPUK ETİKETLER BİRLEŞTİRİLDİ (Hayalet div önlendi)
+    st.markdown("""
+    <div class="glass-card">
+        <div class="couple-message">"Hayatımızın en özel gününde yanımızda olduğunuz için çok mutluyuz..."<br><br><span style="color: #D98880; font-weight: bold;">- Dilruba & Mustafa</span></div>
+    </div>
+    """, unsafe_allow_html=True)
     
     name_input = st.text_input("Adınız Soyadınız:", placeholder="Örn: Atılay Yılmaz")
     
@@ -287,19 +288,21 @@ if st.session_state.user_name == "":
             st.rerun()
         else:
             st.error("Lütfen devam etmek için adınızı ve soyadınızı yazın.")
-    st.markdown('</div>', unsafe_allow_html=True)
 
-# --- İÇERİK AKIŞI ---
+# --- 2. ADIM: İÇERİK AKIŞI ---
 else:
     st.markdown('<div class="main-title">💕 Mustafa & Dilruba 💕</div>', unsafe_allow_html=True)
     st.markdown(f'<div class="top-subtitle">Hoş Geldin, {st.session_state.user_name}!</div>', unsafe_allow_html=True)
 
     # 🏠 ANA SAYFA
     if st.session_state.active_page == "home":
-        st.markdown('<div class="glass-card" style="text-align: center;">', unsafe_allow_html=True)
-        st.markdown('<h3 class="card-title">Bizim Hikayemiz</h3>', unsafe_allow_html=True)
-        st.markdown('<p style="font-style: italic; line-height: 1.8;">"Bir ömür boyu sürecek masalımızın en özel gününe hoş geldiniz. Fotoğraflarınızı paylaşmak ve dijital anı defterimize katkıda bulunmak için alttaki menüyü kullanabilirsiniz."</p>', unsafe_allow_html=True)
-        st.markdown('</div>', unsafe_allow_html=True)
+        # Bütünleşik güvenli blok
+        st.markdown("""
+        <div class="glass-card" style="text-align: center;">
+            <h3 class="card-title">Bizim Hikayemiz</h3>
+            <p style="font-style: italic; line-height: 1.8;">"Bir ömür boyu sürecek masalımızın en özel gününe hoş geldiniz. Fotoğraflarınızı paylaşmak ve dijital anı defterimize katkıda bulunmak için alttaki menüyü kullanabilirsiniz."</p>
+        </div>
+        """, unsafe_allow_html=True)
 
     # 📸 FOTOĞRAF YÜKLEME
     elif st.session_state.active_page == "upload":
@@ -384,12 +387,15 @@ else:
             else:
                 st.error("❌ Google Drive bağlantısı şu an kurulamıyor! Lütfen 'token.pickle' dosyasını kontrol edin.")
 
-    # 🔍 YAPAY ZEKA FOTOĞRAP ARAMA MOTORU (RETROACTIVE AUTO-INDEXER SÜRÜMÜ)
+    # 🔍 YAPAY ZEKA FOTOĞRAP ARAMA MOTORU
     elif st.session_state.active_page == "find_me":
-        st.markdown('<div class="glass-card">', unsafe_allow_html=True)
-        st.markdown('<h3 class="card-title">🔍 Yapay Zeka ile Kendini Bul</h3>', unsafe_allow_html=True)
+        # Güvenli bütünleşik div
+        st.markdown("""
+        <div class="glass-card">
+            <h3 class="card-title">🔍 Yapay Zeka ile Kendini Bul</h3>
+        </div>
+        """, unsafe_allow_html=True)
         
-        st.markdown('<div style="margin-top: 10px; margin-bottom: 10px;">', unsafe_allow_html=True)
         camera_img = st.camera_input("Yüzünüzü Taramak İçin Poz Verin:", key="biyometric_selfie_camera")
         
         if camera_img:
@@ -399,7 +405,6 @@ else:
             if drive_service is not None:
                 with st.spinner("Bulut veritabanı eşitleniyor ve arama yapılıyor... ⏳"):
                     try:
-                        # 1. Google Drive'daki güncel resimlerin listesini al
                         results = drive_service.files().list(
                             q=f"'{DRIVE_FOLDER_ID}' in parents and trashed = false and mimeType = 'image/jpeg' and name != '{DB_FILE_NAME}'",
                             fields="files(id, name)"
@@ -409,14 +414,9 @@ else:
                         drive_file_names = {file['name'] for file in drive_files}
                         drive_id_map = {file['name']: file['id'] for file in drive_files}
                         
-                        # Canlı bulut veritabanını indir
                         global_db = download_global_db(drive_service)
-                        
-                        # Kayıtlı olan veritabanı isimleri
                         registered_names = {item["name"] for item in global_db if isinstance(item, dict)}
                         
-                        # 🌟 GERİYE DÖNÜK OTOMATİK İNDEKSLENDİRİCİ (MÜHENDİSLİK ŞAHESERİ)
-                        # Drive'da var olan ama veritabanımızda henüz kaydı (biyometrisi) bulunmayan eski dosyaları tespit ediyoruz
                         missing_files = [f for f in drive_files if f['name'] not in registered_names]
                         
                         db_updated = False
@@ -424,9 +424,7 @@ else:
                             st.info(f"⚙️ Geçmişte yüklenmiş {len(missing_files)} fotoğraf ilk defa taranıyor ve yapay zeka hafızasına alınıyor...")
                             for m_file in missing_files:
                                 try:
-                                    # Eksik resmi tekil indir
                                     content = drive_service.files().get_media(fileId=m_file['id']).execute()
-                                    # Vektörünü hesapla
                                     ident = extract_pure_biyometric_vector(content)
                                     ident_list = ident.tolist() if ident is not None else None
                                     
@@ -440,9 +438,8 @@ else:
                                     global_db.append(new_record)
                                     db_updated = True
                                 except:
-                                    pass # Bozuk dosyaları atla
+                                    pass
                         
-                        # Canlı Silme Koruması
                         synced_db = [
                             item for item in global_db 
                             if isinstance(item, dict) and item.get("name") in drive_file_names
@@ -452,7 +449,6 @@ else:
                             global_db = synced_db
                             upload_global_db(drive_service, global_db)
                         
-                        # 2. BİYOMETRİK BENZERLİK TESPİTİ
                         selfie_identity = extract_pure_biyometric_vector(selfie_bytes)
                         
                         if selfie_identity is not None:
@@ -466,18 +462,15 @@ else:
                                     saved_ident_array = np.array(item["biyometric_identity"])
                                     distance = compare_biyometric_vectors(selfie_identity, saved_ident_array)
                                     
-                                    # 🌟 TOLERANS EŞİĞİNİ YÜKSELTTİK (0.38 yaptık) - Loş ışık, gözlük veya hafif gölgelerde bile bulur!
                                     if distance < 0.38:
                                         matched_records.append(item)
                             
-                            # 3. SONUÇLARI GÖSTERME
                             if matched_records:
                                 st.success(f"🎉 Sizin olduğunuz {len(matched_records)} fotoğraf albümden yakalandı!")
                                 
                                 for idx, item in enumerate(matched_records):
                                     file_id = item.get("drive_id")
                                     try:
-                                        # Tekil ve hızlı indirme
                                         photo_bytes = drive_service.files().get_media(fileId=file_id).execute()
                                         photo_b64 = base64.b64encode(photo_bytes).decode()
                                         st.markdown(f'<img src="data:image/jpeg;base64,{photo_b64}" class="ai-found-photo">', unsafe_allow_html=True)
@@ -489,7 +482,8 @@ else:
                                             mime="image/jpeg",
                                             key=f"download_{idx}"
                                         )
-                                        st.write("---")
+                                        # Streamlit çizgi oluşturmasın diye görünmez boşluk kullanıldı
+                                        st.markdown('<div style="margin-bottom: 25px;"></div>', unsafe_allow_html=True)
                                     except Exception as err:
                                         pass
                             else:
@@ -505,19 +499,20 @@ else:
 
     # 📋 PROGRAM SAYFASI
     elif st.session_state.active_page == "program":
-        st.markdown('<div class="glass-card">', unsafe_allow_html=True)
-        st.markdown('<h3 class="card-title">✨ Düğün Akış Programı ✨</h3>', unsafe_allow_html=True)
+        # Güvenli HTML yapısı
         st.markdown("""
-        <div style="font-size: 1.3rem !important; line-height: 2.2; font-weight: 700;">
-            <p><b>19:00 - 19:30 :</b> Misafirlerin Karşılanması & Kokteyl</p>
-            <p style="font-weight:900;"><b>19:30 - 20:00 :</b> Gelin & Damat Girişi ve İlk Dans 💕</p>
-            <p><b>20:00 - 21:30 :</b> Akşam Yemeği Müziği</p>
-            <p style="font-weight:900;"><b>21:30 - 22:00 :</b> Pasta Kesimi & Takı Merasimi</p>
-            <p><b>22:00 - 23:45 :</b> Eğlence, Dans & After Party 🥳</p>
-            <p><b>23:45 - 00:00 :</b> Kapanış & Teşekkür Konuşması</p>
+        <div class="glass-card">
+            <h3 class="card-title">✨ Düğün Akış Programı ✨</h3>
+            <div style="font-size: 1.3rem !important; line-height: 2.2; font-weight: 700;">
+                <p><b>19:00 - 19:30 :</b> Misafirlerin Karşılanması & Kokteyl</p>
+                <p style="font-weight:900;"><b>19:30 - 20:00 :</b> Gelin & Damat Girişi ve İlk Dans 💕</p>
+                <p><b>20:00 - 21:30 :</b> Akşam Yemeği Müziği</p>
+                <p style="font-weight:900;"><b>21:30 - 22:00 :</b> Pasta Kesimi & Takı Merasimi</p>
+                <p><b>22:00 - 23:45 :</b> Eğlence, Dans & After Party 🥳</p>
+                <p><b>23:45 - 00:00 :</b> Kapanış & Teşekkür Konuşması</p>
+            </div>
         </div>
         """, unsafe_allow_html=True)
-        st.markdown('</div>', unsafe_allow_html=True)
 
     # 📱 SABİT MOBİL NAVİGASYON BARI
     st.markdown('<div class="mobile-nav-bar">', unsafe_allow_html=True)
