@@ -36,7 +36,6 @@ def get_drive_service():
         from google_auth_oauthlib.flow import InstalledAppFlow
         SCOPES = ['https://www.googleapis.com/auth/drive.file']
         flow = InstalledAppFlow.from_client_secrets_file(CLIENT_SECRETS_FILE, SCOPES)
-        # 🌟 Canlı sunucu için port tekrar otomatik (0) moduna çekildi:
         creds = flow.run_local_server(port=0)
         with open(TOKEN_FILE, 'wb') as token:
             pickle.dump(creds, token)
@@ -58,71 +57,29 @@ if "db" not in st.session_state: st.session_state.db = load_db()
 if "user_name" not in st.session_state: st.session_state.user_name = ""
 if "active_page" not in st.session_state: st.session_state.active_page = "home"
 if "upload_method" not in st.session_state: st.session_state.upload_method = "camera"
+# 🌟 Slayt şovu için aktif resim indeksini session_state üzerinde tutuyoruz:
+if "bg_index" not in st.session_state: st.session_state.bg_index = 1
 
-def get_base64_encoded_image(image_path):
-    if os.path.exists(image_path):
-        with open(image_path, "rb") as img_file: return base64.b64encode(img_file.read()).decode()
-    return None
-
-# --- CSS YAPILANDIRMASI (FOTOĞRAFLARI NETLEŞTİREN GÜNCEL SÜRÜM) ---
-# --- CSS YAPILANDIRMASI (FOTOĞRAFLARI NETLEŞTİREN GÜNCEL SÜRÜM) ---
-bg_css_steps = ""
-images_b64 = []
+# --- FOTOĞRAFLARIN VARLIĞINI KONTROL ETME ---
+valid_images = []
 for i in range(1, 10):
-    b64_str = get_base64_encoded_image(f"cift_{i}.JPG")
-    if b64_str:
-        images_b64.append(b64_str)
+    img_path = f"cift_{i}.JPG"
+    if os.path.exists(img_path):
+        valid_images.append(img_path)
 
-if images_b64:
-    total_imgs = len(images_b64)
-    step_pct = 100 / total_imgs
-    bg_css_steps = "@keyframes bgSlider {\n"
-    for idx, b64 in enumerate(images_b64):
-        start = idx * step_pct
-        mid = ((idx + 1) * step_pct) - 1
-        bg_css_steps += f"  {start}%, {mid}% {{ background-image: url('data:image/jpeg;base64,{b64}'); }}\n"
-    bg_css_steps += "}"
+# Slayt şovu zamanlayıcısı (Her sayfa tetiklendiğinde veya 5 saniyede bir resmi değiştirir)
+if valid_images:
+    current_time = int(time.time())
+    # Her 6 saniyede bir sonraki fotoğrafa geçiş yapar
+    st.session_state.bg_index = (current_time // 6) % len(valid_images)
+    active_bg_image = valid_images[st.session_state.bg_index]
+else:
+    active_bg_image = None
 
-# --- CSS İÇİN SÜRE HESAPLAMASI ---
-slider_duration = len(images_b64) * 4 if images_b64 else 15
-
-# 🌟 HTML ENJEKSİYONU: Streamlit döngüsünden bağımsız, mobilde asla titremeyen/kaybolmayan arka plan katmanı
+# --- CSS YAPILANDIRMASI (TAMAMEN MOBİL VE PERFORMANS ODAKLI) ---
 st.markdown(f"""
-    <div class="fixed-bg-slider"></div>
-    <div class="fixed-bg-overlay"></div>
-    
     <style>
-    {bg_css_steps}
-    
-    /* 📱 Sabit Arka Plan Slayt Katmanı (Streamlit'ten tamamen bağımsız çalışır) */
-    .fixed-bg-slider {{
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100vw;
-        height: 100vh;
-        z-index: -2;
-        background-size: cover !important;
-        background-position: center center !important;
-        background-repeat: no-repeat !important;
-        animation: bgSlider {slider_duration}s infinite ease-in-out;
-        /* Mobil tarayıcılarda kaydırma kaynaklı yeniden tetiklenmeyi engeller: */
-        will-change: background-image;
-        transform: translate3d(0, 0, 0);
-    }}
-    
-    /* 🌟 Fotoğrafların Üzerindeki Seffaflık Maskesi */
-    .fixed-bg-overlay {{
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100vw;
-        height: 100vh;
-        z-index: -1;
-        background-color: rgba(255, 254, 253, 0.45) !important;
-    }}
-    
-    /* 📱 Streamlit'in kendi katmanlarındaki tüm beyaz/gri arka planları zorla sıfırlıyoruz */
+    /* 📱 Streamlit katmanlarını tamamen transparan yapıp arkadaki resmi görünür kılıyoruz */
     [data-testid="stAppViewContainer"], .stApp, [data-testid="stApp"], 
     [data-testid="stMainBlockContainer"], .main, .block-container, [data-testid="stHeader"] {{
         background: transparent !important;
@@ -132,7 +89,7 @@ st.markdown(f"""
     
     [data-testid="stMainBlockContainer"] {{
         position: relative;
-        z-index: 1;
+        z-index: 10;
         padding-bottom: 140px !important;
         padding-top: 20px !important;
         margin: 0px !important;
@@ -195,8 +152,38 @@ st.markdown(f"""
     .mobile-nav-bar div[data-testid="column"] {{ display: flex !important; justify-content: center !important; align-items: center !important; padding: 0 !important; }}
     .mobile-nav-bar div.stButton > button {{ background: transparent !important; border: none !important; box-shadow: none !important; height: auto !important; padding: 4px 0 !important; margin: 0 !important; display: block !important; text-align: center !important; }}
     .mobile-nav-bar div.stButton > button p, .mobile-nav-bar div.stButton > button span {{ color: #7D4643 !important; font-size: 1.05rem !important; font-weight: 800 !important; }}
+    
+    /* 📱 Görselin altına binen sabit maske */
+    .bg-mask {{
+        position: fixed;
+        top: 0; left: 0; width: 100vw; height: 100vh;
+        background-color: rgba(255, 254, 253, 0.45) !important;
+        z-index: -1;
+    }}
     </style>
 """, unsafe_allow_html=True)
+
+# 🌟 ARKA PLAN GÖRSELİNİN YEREL RENDER MOTORU (Zorla arka katmana çiviliyoruz)
+if active_bg_image:
+    # Resim enjekte ediliyor
+    st.image(active_bg_image, use_container_width=True)
+    # Maske katmanı yerleştiriliyor
+    st.markdown('<div class="bg-mask"></div>', unsafe_allow_html=True)
+    
+    # Görseli CSS ile ekran boyutunda sabit arka plan katmanı haline getiriyoruz:
+    st.markdown(f"""
+        <style>
+        img[data-testid="stImage"] {{
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            width: 100vw !important;
+            height: 100vh !important;
+            object-fit: cover !important;
+            z-index: -2 !important;
+        }}
+        </style>
+    """, unsafe_allow_html=True)
 
 # --- 1. ADIM: GİRİŞ EKRANI ---
 if st.session_state.user_name == "":
@@ -224,7 +211,7 @@ else:
     if st.session_state.active_page == "home":
         st.markdown('<div class="glass-card" style="text-align: center;">', unsafe_allow_html=True)
         st.markdown('<h3 class="card-title">Bizim Hikayemiz</h3>', unsafe_allow_html=True)
-        st.markdown('<p style="font-style: italic; line-height: 1.8;">"Bir ömür boyu sürecek masalımızın en özel gününe hoş geldiniz. Fotoğraflarınızı paylaşmak ve dijital anı devterimize katkıda bulunmak için alttaki menüyü kullanabilirsiniz."</p>', unsafe_allow_html=True)
+        st.markdown('<p style="font-style: italic; line-height: 1.8;">"Bir ömür boyu sürecek masalımızın en özel gününe hoş geldiniz. Fotoğraflarınızı paylaşmak ve dijital anı defterimize katkıda bulunmak için alttaki menüyü kullanabilirsiniz."</p>', unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
     # 📸 FOTOĞRAF YÜKLEME SAYFASI (UPLOAD)
@@ -237,7 +224,6 @@ else:
         active_file = uploaded_file if uploaded_file is not None else gallery_file
         
         if active_file is not None:
-            # 🌟 NameError ve bağlantı kopmasını önlemek için tam burada çağırıyoruz:
             drive_service = get_drive_service()
             
             if drive_service is not None:
@@ -256,7 +242,6 @@ else:
                         file_bytes = io.BytesIO(active_file.read())
                         media = MediaIoBaseUpload(file_bytes, mimetype='image/jpeg', resumable=True)
                         
-                        # 🚀 Google Drive'a güvenle gönderiliyor
                         uploaded_drive_file = drive_service.files().create(
                             body=file_metadata,
                             media_body=media,
