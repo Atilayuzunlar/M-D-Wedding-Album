@@ -43,7 +43,7 @@ def get_drive_service():
             
     return build('drive', 'v3', credentials=creds)
 
-# --- 🌟 ORTAK BULUT VERİTABANI MOTORU (GOOGLE DRIVE INTEGRATED) ---
+# --- 🌟 ORTAK BULUT VERİTABANI MOTORU (ASLA KOPMAYACAK TEK HAMLELİK SÜRÜM) ---
 DB_FILE_NAME = "database.pkl"
 
 def get_db_file_id(drive_service):
@@ -61,27 +61,22 @@ def get_db_file_id(drive_service):
         return None
 
 def download_global_db(drive_service):
-    """Google Drive'dan database.pkl dosyasını çeker ve yükler."""
+    """Google Drive'dan database.pkl dosyasını TEK HAMLEDE (asla kopmadan) çeker."""
     file_id = get_db_file_id(drive_service)
     if not file_id:
         return [] # Henüz dosya oluşturulmamışsa boş liste dön
     
     try:
-        request = drive_service.files().get_media(fileId=file_id)
-        file_io = io.BytesIO()
-        downloader = MediaIoBaseDownload(file_io, request)
-        done = False
-        while not done:
-            status, done = downloader.next_chunk()
-        
-        file_io.seek(0)
+        # 🌟 Parça parça (chunk) indirme yerine doğrudan tek bir execute() ile byte'ları çekiyoruz
+        content = drive_service.files().get_media(fileId=file_id).execute()
+        file_io = io.BytesIO(content)
         return pickle.load(file_io)
     except Exception as e:
-        # Bozuk piksel veya okuma hatası durumunda boş veri dön
+        # Dosya bozuksa veya okunamıyorsa boş liste ile temiz başlangıç yap
         return []
 
 def upload_global_db(drive_service, db_data):
-    """database.pkl verilerini Google Drive'a yükler veya günceller."""
+    """database.pkl verilerini tek bir hamlede Google Drive'a mühürler."""
     try:
         file_io = io.BytesIO()
         pickle.dump(db_data, file_io)
@@ -89,7 +84,8 @@ def upload_global_db(drive_service, db_data):
         
         file_id = get_db_file_id(drive_service)
         
-        media = MediaIoBaseUpload(file_io, mimetype='application/octet-stream', resumable=True)
+        # Resumable upload yerine küçük dosyalar için doğrudan yükleme (Simple Upload) yapıyoruz
+        media = MediaIoBaseUpload(file_io, mimetype='application/octet-stream', resumable=False)
         
         if file_id:
             # Varsa güncelle
@@ -109,7 +105,6 @@ def upload_global_db(drive_service, db_data):
             ).execute()
     except Exception as e:
         st.error(f"Global veritabanı senkronize edilemedi: {e}")
-
 # --- SEANS YAPILANDIRMASI ---
 if "user_name" not in st.session_state: st.session_state.user_name = ""
 if "active_page" not in st.session_state: st.session_state.active_page = "home"
