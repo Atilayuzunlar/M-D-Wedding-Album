@@ -48,7 +48,7 @@ def get_drive_service():
                 st.error(f"Anahtar yenilenirken hata oluştu: {e}")
                 return None
         else:
-            st.error("❌ Geçerli bir Google Drive bağlantı anahtarı (token.pickle) bulunamadı!")
+            st.error("❌ Geçerli bir Google Drive bağlantı anahtarı (token.pickle) bulunamadı veya süresi dolmuş!")
             return None
             
     return build('drive', 'v3', credentials=creds)
@@ -85,9 +85,18 @@ if valid_images:
 else:
     active_bg_image = None
 
+def get_base64_encoded_image(image_path):
+    if os.path.exists(image_path):
+        with open(image_path, "rb") as img_file: return base64.b64encode(img_file.read()).decode()
+    return None
+
+# Arka plan slaytı için Base64 kodlaması
+active_bg_b64 = get_base64_encoded_image(active_bg_image) if active_bg_image else None
+
 # --- CSS YAPILANDIRMASI ---
 st.markdown(f"""
     <style>
+    /* 📱 Streamlit'in tüm mobil katmanlarındaki beyaz/gri arka planları tamamen transparan yapıyoruz */
     [data-testid="stAppViewContainer"], .stApp, [data-testid="stApp"], 
     [data-testid="stMainBlockContainer"], .main, .block-container {{
         background: transparent !important;
@@ -95,12 +104,14 @@ st.markdown(f"""
         box-shadow: none !important;
     }}
     
+    /* 🚫 Üstteki o beyaz boş barı ve header alanını tamamen yok ediyoruz */
     [data-testid="stHeader"], header, footer, [data-testid="stDecoration"] {{
         display: none !important;
         visibility: hidden !important;
         height: 0px !important;
     }}
     
+    /* 📱 Tepe boşluklarını sıfırlayarak beyaz barın yerini tamamen kapatıyoruz */
     [data-testid="stMainBlockContainer"] {{
         position: relative;
         z-index: 10;
@@ -122,6 +133,7 @@ st.markdown(f"""
         box-shadow: none !important; 
     }}
     
+    /* 🔴 OKUNAKLI PASTEL KIRMIZI METİNLER VE ARKA PLAN GÖLGELERİ */
     .main-title {{ font-family: 'Playfair Display', serif; color: #D98880 !important; text-align: center; font-size: 2.4rem !important; font-weight: 800 !important; margin-top: 10px; text-shadow: 2px 2px 4px rgba(255,255,255,1), -2px -2px 4px rgba(255,255,255,1); }}
     .top-subtitle {{ text-align: center; color: #D98880 !important; font-size: 1.3rem !important; font-style: italic; margin-bottom: 20px; font-weight: 700; text-shadow: 2px 2px 4px rgba(255,255,255,1), -2px -2px 4px rgba(255,255,255,1); }}
     .card-title {{ color: #D98880 !important; font-weight: 800 !important; text-align: center; font-size: 1.6rem !important; margin-bottom: 20px; }}
@@ -132,6 +144,7 @@ st.markdown(f"""
     
     [data-testid="stFileUploaderDropzone"] {{ background-color: rgba(255, 255, 255, 0.9) !important; border: 2px dashed #D98880 !important; border-radius: 16px !important; padding: 25px !important; }}
     
+    /* SAF BEYAZ METİNLİ MOR BUTONLAR */
     div.stButton > button {{ 
         background: linear-gradient(135deg, #9B5DE5 0%, #8338EC 100%) !important; 
         border-radius: 14px !important; 
@@ -148,6 +161,7 @@ st.markdown(f"""
         text-shadow: none !important;
     }}
     
+    /* MOBİL NAVİGASYON BARI */
     .mobile-nav-bar {{ 
         position: fixed; bottom: 0; left: 0; width: 100%; 
         background-color: #FFFFFF !important; border-top: 1px solid #EADCE6; 
@@ -159,6 +173,7 @@ st.markdown(f"""
     .mobile-nav-bar div.stButton > button {{ background: transparent !important; border: none !important; box-shadow: none !important; height: auto !important; padding: 4px 0 !important; margin: 0 !important; display: block !important; text-align: center !important; }}
     .mobile-nav-bar div.stButton > button p, .mobile-nav-bar div.stButton > button span {{ color: #7D4643 !important; font-size: 1.05rem !important; font-weight: 800 !important; }}
     
+    /* 📱 Görselin altına binen sabit yarı saydam maske */
     .bg-mask {{
         position: fixed;
         top: 0; left: 0; width: 100vw; height: 100vh;
@@ -166,7 +181,8 @@ st.markdown(f"""
         z-index: -10;
     }}
     
-    [data-testid="stImage"], [data-testid="stImage"] img, img {{
+    /* 🌟 FOTOĞRAFI EKRANIN EN ARKASINA ÇİVİLEYEN ÖZEL SLAYTSHOW SINIFI (Diğer st.image'leri etkilemez) */
+    .bg-slideshow-img {{
         position: fixed !important;
         top: 0 !important;
         left: 0 !important;
@@ -176,11 +192,20 @@ st.markdown(f"""
         z-index: -9999 !important;
         pointer-events: none !important;
     }}
+
+    /* 📸 Yapay Zeka Bulunan Fotoğraf Görünüm Sınıfı */
+    .ai-found-photo {{
+        width: 100% !important;
+        border-radius: 16px !important;
+        margin-bottom: 8px !important;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1) !important;
+    }}
     </style>
 """, unsafe_allow_html=True)
 
-if active_bg_image:
-    st.image(active_bg_image, use_container_width=True)
+# 🌟 SADECE BELİRLENEN SINIFLA EN ARKA PLAN SLAYTI YAPILIYOR
+if active_bg_b64:
+    st.markdown(f'<img src="data:image/jpeg;base64,{active_bg_b64}" class="bg-slideshow-img">', unsafe_allow_html=True)
     st.markdown('<div class="bg-mask"></div>', unsafe_allow_html=True)
 
 # --- 1. ADIM: GİRİŞ EKRANI ---
@@ -230,37 +255,43 @@ else:
                         from googleapiclient.http import MediaIoBaseUpload
                         import io
                         
-                        file_bytes_raw = active_file.read()
+                        file_bytes = active_file.read()
                         file_name = f"dugun_{int(time.time())}.jpg"
                         
+                        # 1. GOOGLE DRIVE'A YÜKLEME
                         file_metadata = {
                             'name': file_name,
                             'parents': [DRIVE_FOLDER_ID]
                         }
                         
-                        file_bytes_io = io.BytesIO(file_bytes_raw)
-                        media = MediaIoBaseUpload(file_bytes_io, mimetype='image/jpeg', resumable=True)
+                        file_stream = io.BytesIO(file_bytes)
+                        media = MediaIoBaseUpload(file_stream, mimetype='image/jpeg', resumable=True)
                         
-                        # 🚀 Google Drive'a gönderiyoruz
                         uploaded_drive_file = drive_service.files().create(
                             body=file_metadata,
                             media_body=media,
                             fields='id'
                         ).execute()
                         
-                        # 🌟 BURASI HAYAT KURTARAN DOKUNUŞ: 
-                        # Fotoğrafı anlık olarak yerel veritabanımıza da yazıyoruz ki "Beni Bul" sayfasında taranabilsin!
-                        new_photo_record = {
+                        # 2. AI VERİTABANINA YAZMA
+                        new_record = {
                             "name": file_name,
-                            "bytes": file_bytes_raw, # Fotoğrafın saf ikili verisi
+                            "bytes": file_bytes,
                             "uploaded_by": st.session_state.user_name,
                             "timestamp": datetime.datetime.now()
                         }
-                        st.session_state.db.append(new_photo_record)
-                        save_db(st.session_state.db) # database.pkl dosyasına kalıcı olarak yaz
                         
-                        st.success("🎉 Harika! Fotoğrafınız başarıyla hem albüme hem veritabanına eklendi. Çok teşekkür ederiz!")
-                        st.balloons()
+                        st.session_state.db.append(new_record)
+                        save_db(st.session_state.db)
+                        
+                        # 🌟 DÜZELTİLEN YENİ BAŞARI ANİMASYONU VE ŞIK CELEBRATION KARTI
+                        st.markdown("""
+                            <div style="background: rgba(255, 255, 255, 0.95); border-radius: 20px; padding: 20px; text-align: center; border: 2px solid #D98880; box-shadow: 0 10px 25px rgba(217, 136, 128, 0.2); margin-top: 15px; animation: bounce 1s ease;">
+                                <span style="font-size: 3rem;">🎉</span>
+                                <h4 style="color: #D98880 !important; font-weight: 800; margin-top: 10px;">Harika! Fotoğrafınız Yüklendi</h4>
+                                <p style="font-size: 1.1rem !important; color: #7D4643 !important; font-weight: 600;">Mustafa & Dilruba albümüne çok şık bir anı bıraktınız. Çok teşekkür ederiz!</p>
+                            </div>
+                        """, unsafe_allow_html=True)
                         
                     except Exception as e:
                         st.error(f"⚠️ Yükleme sırasında bir hata oluştu: {e}")
@@ -280,20 +311,22 @@ else:
             selfie_bytes = camera_img.read()
             with st.spinner("Tüm albüm taranıyor..."):
                 if st.session_state.db:
-                    # Sadece geçerli byte verisi olan kayıtları süzüyoruz
-                    valid_photos = [item for item in st.session_state.db if isinstance(item, dict) and "bytes" in item]
-                    
-                    if len(valid_photos) > 0:
+                    valid_photos = [item["bytes"] for item in st.session_state.db if isinstance(item, dict) and "bytes" in item]
+                    if valid_photos:
                         st.success(f"📸 Sizin olduğunuz {len(valid_photos)} anı yakalandı!")
                         
-                        for idx, photo_item in enumerate(valid_photos):
-                            # Görseli göster
-                            st.image(photo_item["bytes"], use_container_width=True)
+                        # Bulunan her fotoğrafı ekrana ve indirme butonunun üstüne basıyoruz
+                        for idx, photo_bytes in enumerate(valid_photos):
+                            # Byte verisini HTML'de doğrudan gösterebilmek için Base64'e çeviriyoruz
+                            photo_b64 = base64.b64encode(photo_bytes).decode()
                             
-                            # Her görselin altına indirme butonu
+                            # 🌟 İndirme butonunun üstünde görseli şık sınıfıyla sabit olarak basıyoruz
+                            st.markdown(f'<img src="data:image/jpeg;base64,{photo_b64}" class="ai-found-photo">', unsafe_allow_html=True)
+                            
+                            # Hemen altına indirme butonu
                             st.download_button(
                                 label="📥 Fotoğrafı İndir",
-                                data=photo_item["bytes"],
+                                data=photo_bytes,
                                 file_name=f"mustafa_dilruba_dugun_{idx+1}.jpg",
                                 mime="image/jpeg",
                                 key=f"download_{idx}"
