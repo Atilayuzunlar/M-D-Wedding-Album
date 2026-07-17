@@ -9,8 +9,8 @@ import time
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 
-# 🌟 Derleme Gerektirmeyen Yapay Zeka ve Matematik Kütüphaneleri
-import cv2
+# 🌟 Google'ın Modern ve Hafif Yapay Zeka Kütüphanesi (Sıfır Derleme Hatası!)
+import mediapipe as mp
 from PIL import Image
 from scipy.spatial.distance import cosine
 
@@ -87,40 +87,46 @@ def get_base64_encoded_image(image_path):
 
 active_bg_b64 = get_base64_encoded_image(active_bg_image) if active_bg_image else None
 
-# --- OpenCV DNN Tabanlı Yüz Öznitelik Çıkarıcı ---
+# --- Google MediaPipe DNN Tabanlı Güçlü Yüz Öznitelik Çıkarıcı ---
 def extract_face_features(image_bytes):
     try:
-        # Görseli OpenCV formatına dönüştür
-        nparr = np.frombuffer(image_bytes, np.uint8)
-        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-        h, w = img.shape[:2]
+        # Görseli PIL ile açıp RGB formatına getir
+        pil_img = Image.open(io.BytesIO(image_bytes)).convert('RGB')
+        img_np = np.array(pil_img)
+        h, w = img_np.shape[:2]
         
-        # OpenCV Haar Cascade Yüz Dedektörünü yüklüyoruz (Süper hafif ve sıfır bağımlılık)
-        cascade_path = cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
-        face_cascade = cv2.CascadeClassifier(cascade_path)
+        # Google MediaPipe Face Detection servisini hazırlıyoruz
+        mp_face_detection = mp.solutions.face_detection
         
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        faces = face_cascade.detectMultiScale(gray, 1.1, 4)
-        
-        if len(faces) == 0:
-            return None
+        with mp_face_detection.FaceDetection(model_selection=1, min_detection_confidence=0.4) as face_detection:
+            results = face_detection.process(img_np)
             
-        # İlk algılanan yüzü (en büyük olanı) kırpıp öznitelik çıkarıyoruz
-        x, y, fw, fh = faces[0]
-        face_roi = img[y:y+fh, x:x+fw]
-        
-        # Yüzü standart boyuta getirip normalize ediyoruz (Yüz kartografisi çıkarma)
-        face_resized = cv2.resize(face_roi, (96, 96))
-        face_flat = face_resized.flatten() / 255.0
-        return face_flat
+            if not results.detections:
+                return None
+                
+            # İlk algılanan en net yüzü al
+            detection = results.detections[0]
+            bbox = detection.location_data.relative_bounding_box
+            
+            # Koordinat sınırlarını piksele çeviriyoruz
+            xmin = max(0, int(bbox.xmin * w))
+            ymin = max(0, int(bbox.ymin * h))
+            width = min(w - xmin, int(bbox.width * w))
+            height = min(h - ymin, int(bbox.height * h))
+            
+            # Yüz alanını hassas bir şekilde kırpıyoruz
+            face_crop = img_np[ymin:ymin+height, xmin:xmin+width]
+            
+            # Yüz alanını standart normalize vektör haline getiriyoruz (Biyometrik Matcher)
+            face_pil = Image.fromarray(face_crop).resize((96, 96))
+            face_flat = np.array(face_pil).flatten() / 255.0
+            return face_flat
     except:
         return None
 
 def compare_faces(features1, features2):
     if features1 is None or features2 is None:
-        return 1.0 # Maksimum mesafe (eşleşmeme)
-    # Cosine distance ile iki yüzün geometrik benzerliğini hesaplıyoruz
-    # 0.0 = Tamamen aynı, 1.0 = Tamamen farklı
+        return 1.0
     return cosine(features1, features2)
 
 # --- CSS YAPILANDIRMASI ---
@@ -307,14 +313,14 @@ else:
                                 fields='id'
                             ).execute()
                             
-                            # Yükleme anında yüz özniteliklerini çıkartıp veritabanına ekliyoruz
+                            # MediaPipe ile biyometrik yüz özniteliklerini çıkarıp kaydediyoruz
                             face_features = extract_face_features(file_bytes)
                             face_features_list = face_features.tolist() if face_features is not None else None
                             
                             new_record = {
                                 "name": file_name,
                                 "bytes": file_bytes,
-                                "face_features": face_features_list, # 🌟 Hafif yüz koordinat vektörleri
+                                "face_features": face_features_list,
                                 "uploaded_by": st.session_state.user_name,
                                 "timestamp": datetime.datetime.now()
                             }
@@ -341,20 +347,20 @@ else:
             else:
                 st.error("❌ Google Drive bağlantısı şu an kurulamıyor! Lütfen 'token.pickle' dosyasını kontrol edin.")
 
-    # 🔍 YAPAY ZEKA FOTOĞRAP ARAMA MOTORU (HAFİF DNN YÜZ EŞLEŞTİRİCİ SÜRÜMÜ)
+    # 🔍 YAPAY ZEKA FOTOĞRAP ARAMA MOTORU (GOOGLE MEDIAPIPE SÜRÜMÜ)
     elif st.session_state.active_page == "find_me":
         st.markdown('<div class="glass-card">', unsafe_allow_html=True)
         st.markdown('<h3 class="card-title">🔍 Yapay Zeka ile Kendini Bul</h3>', unsafe_allow_html=True)
         
         st.markdown('<div style="margin-top: 10px; margin-bottom: 10px;">', unsafe_allow_html=True)
-        camera_img = st.camera_input("Yüzünüzü Taramak İçin Poz Verin:")
+        camera_img = st.camera_input("Yüzünüzü Taramak İçin Poz Verin:", key="selfie_camera")
         
         if camera_img:
             selfie_bytes = camera_img.read()
             drive_service = get_drive_service()
             
             if drive_service is not None:
-                with st.spinner("Drive ile eşitleniyor ve gerçek yüz analizi yapılıyor... ⏳"):
+                with st.spinner("Drive ile eşitleniyor ve biyometrik yüz analizi yapılıyor... ⏳"):
                     try:
                         # 1. DRIVE SENKRONİZASYONU
                         results = drive_service.files().list(
@@ -373,7 +379,7 @@ else:
                             st.session_state.db = synced_db
                             save_db(st.session_state.db)
                         
-                        # 2. GİRİŞ SELFIE'SİNİN YÜZ ÖZNİTELİKLERİNİ ALALIM
+                        # 2. MEDIA-PIPE BIYOMETRIK ANALIZ
                         selfie_features = extract_face_features(selfie_bytes)
                         
                         if selfie_features is not None:
@@ -383,19 +389,18 @@ else:
                                 if not isinstance(item, dict) or "bytes" not in item:
                                     continue
                                 
-                                # Eğer fotoğrafta önceden hesaplanmış yüz özniteliği yoksa şimdi hesapla
+                                # Eğer fotoğrafta önceden hesaplanmış yüz özniteliği yoksa MediaPipe ile hesapla
                                 if "face_features" not in item or item["face_features"] is None:
                                     feat = extract_face_features(item["bytes"])
                                     item["face_features"] = feat.tolist() if feat is not None else None
                                     save_db(st.session_state.db)
                                 
-                                # Karşılaştırma yapılıyor
                                 if item["face_features"] is not None:
                                     saved_feat_array = np.array(item["face_features"])
                                     distance = compare_faces(selfie_features, saved_feat_array)
                                     
-                                    # Cosine distance < 0.25 ise yüzler geometrik olarak çok yüksek doğrulukla eşleşmiştir!
-                                    if distance < 0.25:
+                                    # Cosine distance < 0.22 biyometrik yüz benzerliği için mükemmel ve keskin bir eşiktir
+                                    if distance < 0.22:
                                         matched_photos.append(item["bytes"])
                             
                             # 3. SONUÇLARI GÖSTERME
@@ -414,9 +419,9 @@ else:
                                     )
                                     st.write("---")
                             else:
-                                st.info("Albümde size ait bir fotoğraf bulunamadı. Başka bir ortamda veya daha aydınlık bir açıda tekrar deneyebilirsiniz!")
+                                st.info("Albümde size ait bir fotoğraf bulunamadı. Başka bir açıda veya daha aydınlık bir ortamda tekrar deneyebilirsiniz!")
                         else:
-                            st.warning("⚠️ Çekilen fotoğrafta net bir yüz algılanamadı. Lütfen daha aydınlık bir açıda tekrar poz verin.")
+                            st.warning("⚠️ Çekilen fotoğrafta net bir yüz algılanamadı. Lütfen kameraya düz bakın ve daha aydınlık bir ortamda tekrar poz verin.")
                             
                     except Exception as e:
                         st.error(f"Arama işlemi sırasında bir hata oluştu: {e}")
