@@ -7,7 +7,7 @@ import datetime
 import base64
 import time
 from googleapiclient.discovery import build
-from googleapiclient.http import MediaIoBaseUpload
+from googleapiclient.http import MediaIoBaseUpload, MediaIoBaseDownload
 from PIL import Image
 
 # --- GOOGLE DRIVE YAPILANDIRMASI ---
@@ -43,7 +43,7 @@ def get_drive_service():
             
     return build('drive', 'v3', credentials=creds)
 
-# --- GEÇİCİ VERİTABANI MOTORU ---
+# --- GEÇİCİ VERİTABANI MOTORU (Yükleme anı için hafif cache) ---
 DB_FILE = "database.pkl"
 def load_db():
     if os.path.exists(DB_FILE):
@@ -86,29 +86,23 @@ active_bg_b64 = get_base64_encoded_image(active_bg_image) if active_bg_image els
 # --- SAF PYTHON BİYOMETRİK YÜZ VE IŞIK KARTOGRAFİSİ ---
 def extract_pure_biyometric_vector(image_bytes):
     try:
-        # Görseli PIL ile açıp standart boyuta getiriyoruz
         img = Image.open(io.BytesIO(image_bytes)).convert('RGB')
         img_resized = img.resize((64, 64))
         img_np = np.array(img_resized, dtype=np.float32)
         
         # 1. Cilt Rengi Segmentasyonu (Skin Color Segmentation)
-        # İnsan ten rengi RGB spektrumunda belirli oranlardadır. Bu maskeyle ten piksellerini izole ediyoruz.
         r = img_np[:, :, 0]
         g = img_np[:, :, 1]
         b = img_np[:, :, 2]
         
-        # Standart insan ten rengi matematiksel eşiği
         skin_mask = (r > 95) & (g > 40) & (b > 20) & ((r - g) > 15) & (r > g) & (r > b)
-        
-        # Ten rengi piksellerini 1, diğerlerini 0 yapıyoruz
         skin_vector = np.where(skin_mask, 1.0, 0.0).flatten()
         
-        # 2. Aydınlık / Gölge Haritası (Yüzün gölgelendirme yapısı)
+        # 2. Aydınlık / Gölge Haritası
         gray_img = img_resized.convert('L')
         gray_np = np.array(gray_img, dtype=np.float32) / 255.0
         shadow_vector = gray_np.flatten()
         
-        # İki vektörü birleştirerek benzersiz bir biyometrik kimlik (embedding) oluşturuyoruz
         biyometric_identity = np.concatenate([skin_vector, shadow_vector])
         return biyometric_identity
     except:
@@ -118,7 +112,6 @@ def compare_biyometric_vectors(vector1, vector2):
     if vector1 is None or vector2 is None:
         return 1.0
     
-    # Cosine Similarity formülünü saf Python/numpy ile uyguluyoruz
     dot_product = np.dot(vector1, vector2)
     norm_a = np.linalg.norm(vector1)
     norm_b = np.linalg.norm(vector2)
@@ -127,7 +120,6 @@ def compare_biyometric_vectors(vector1, vector2):
         return 1.0
         
     similarity = dot_product / (norm_a * norm_b)
-    # Mesafeye çeviriyoruz (0.0 = Aynı, 1.0 = Alakasız)
     return 1.0 - similarity
 
 # --- CSS YAPILANDIRMASI ---
@@ -314,14 +306,14 @@ else:
                                 fields='id'
                             ).execute()
                             
-                            # Biyometrik yüz ve ton haritasını çıkartıp veritabanına ekliyoruz
+                            # 2. LOCAL VERİTABANI CACHE (Uyumlu saklama)
                             biyometric_identity = extract_pure_biyometric_vector(file_bytes)
                             identity_list = biyometric_identity.tolist() if biyometric_identity is not None else None
                             
                             new_record = {
                                 "name": file_name,
                                 "bytes": file_bytes,
-                                "biyometric_identity": identity_list, # 🌟 Hafif biyometrik kimlik
+                                "biyometric_identity": identity_list,
                                 "uploaded_by": st.session_state.user_name,
                                 "timestamp": datetime.datetime.now()
                             }
@@ -348,7 +340,7 @@ else:
             else:
                 st.error("❌ Google Drive bağlantısı şu an kurulamıyor! Lütfen 'token.pickle' dosyasını kontrol edin.")
 
-    # 🔍 YAPAY ZEKA FOTOĞRAP ARAMA MOTORU (SAF PYTHON BİYOMETRİK EŞLEŞTİRİCİ SÜRÜMÜ)
+    # 🔍 YAPAY ZEKA FOTOĞRAP ARAMA MOTORU (CANLI GOOGLE DRIVE HAVUZ SÜRÜMÜ)
     elif st.session_state.active_page == "find_me":
         st.markdown('<div class="glass-card">', unsafe_allow_html=True)
         st.markdown('<h3 class="card-title">🔍 Yapay Zeka ile Kendini Bul</h3>', unsafe_allow_html=True)
@@ -361,71 +353,77 @@ else:
             drive_service = get_drive_service()
             
             if drive_service is not None:
-                with st.spinner("Drive ile eşitleniyor ve akıllı yüz analizi yapılıyor... ⏳"):
+                # 🌟 KULLANICIYA SÜRECİ BİLDİRİYORUZ (Canlı Drive taraması başladı!)
+                with st.spinner("Buluttaki ortak düğün albümünden tüm fotoğraflar taranıyor... ⏳"):
                     try:
-                        # 1. DRIVE SENKRONİZASYONU
+                        # 1. GOOGLE DRIVE'DAKİ TÜM RESİMLERİN LİSTESİNİ ALALIM (Ortak global havuz)
                         results = drive_service.files().list(
-                            q=f"'{DRIVE_FOLDER_ID}' in parents and trashed = false",
-                            fields="files(name)"
+                            q=f"'{DRIVE_FOLDER_ID}' in parents and trashed = false and mimeType image/jpeg",
+                            fields="files(id, name)"
                         ).execute()
                         drive_files = results.get('files', [])
-                        drive_file_names = {file['name'] for file in drive_files}
                         
-                        synced_db = [
-                            item for item in st.session_state.db 
-                            if isinstance(item, dict) and item.get("name") in drive_file_names
-                        ]
-                        
-                        if len(synced_db) != len(st.session_state.db):
-                            st.session_state.db = synced_db
-                            save_db(st.session_state.db)
-                        
-                        # 2. BİYOMETRİK TON VE CİLT HARİTASI ANALİZİ
-                        selfie_identity = extract_pure_biyometric_vector(selfie_bytes)
-                        
-                        if selfie_identity is not None:
-                            matched_photos = []
-                            
-                            for item in st.session_state.db:
-                                if not isinstance(item, dict) or "bytes" not in item:
-                                    continue
-                                
-                                # Eğer fotoğrafta önceden hesaplanmış biyometrik kimlik yoksa hesapla
-                                if "biyometric_identity" not in item or item["biyometric_identity"] is None:
-                                    ident = extract_pure_biyometric_vector(item["bytes"])
-                                    item["biyometric_identity"] = ident.tolist() if ident is not None else None
-                                    save_db(st.session_state.db)
-                                
-                                if item["biyometric_identity"] is not None:
-                                    saved_ident_array = np.array(item["biyometric_identity"])
-                                    distance = compare_biyometric_vectors(selfie_identity, saved_ident_array)
-                                    
-                                    # Cosine distance < 0.28 düğün ortamındaki ışık ve biyometrik cilt yapısı için en isabetli eşleşme sınırıdır
-                                    if distance < 0.28:
-                                        matched_photos.append(item["bytes"])
-                            
-                            # 3. SONUÇLARI GÖSTERME
-                            if matched_photos:
-                                st.success(f"📸 Sizin olduğunuz {len(matched_photos)} anı yakalandı!")
-                                for idx, photo_bytes in enumerate(matched_photos):
-                                    photo_b64 = base64.b64encode(photo_bytes).decode()
-                                    st.markdown(f'<img src="data:image/jpeg;base64,{photo_b64}" class="ai-found-photo">', unsafe_allow_html=True)
-                                    
-                                    st.download_button(
-                                        label="📥 Fotoğrafı İndir",
-                                        data=photo_bytes,
-                                        file_name=f"mustafa_dilruba_dugun_{idx+1}.jpg",
-                                        mime="image/jpeg",
-                                        key=f"download_{idx}"
-                                    )
-                                    st.write("---")
-                            else:
-                                st.info("Albümde size ait bir fotoğraf bulunamadı. Başka bir ortamda veya daha aydınlık bir açıda tekrar deneyebilirsiniz!")
+                        if len(drive_files) == 0:
+                            st.info("Albümde henüz hiç fotoğraf bulunmuyor.")
                         else:
-                            st.warning("⚠️ Biyometrik analiz başarısız oldu. Lütfen daha aydınlık bir ortamda kameraya düz bakarak tekrar poz verin.")
+                            # Giriş yapılan selfienin biyometrik imzasını alalım
+                            selfie_identity = extract_pure_biyometric_vector(selfie_bytes)
+                            
+                            if selfie_identity is not None:
+                                matched_photos = []
+                                progress_text = st.empty()
+                                
+                                # Her resmi Google Drive'dan anlık olarak RAM belleğe indiriyoruz
+                                for i, file_info in enumerate(drive_files):
+                                    file_id = file_info['id']
+                                    file_name = file_info['name']
+                                    
+                                    # Progress göstergesi
+                                    progress_text.text(f"Analiz ediliyor: {i+1} / {len(drive_files)} fotoğraf... 🔍")
+                                    
+                                    # Canlı indirme isteği (RAM üzerinde buffer olarak)
+                                    request = drive_service.files().get_media(fileId=file_id)
+                                    file_io = io.BytesIO()
+                                    downloader = MediaIoBaseDownload(file_io, request)
+                                    done = False
+                                    while not done:
+                                        status, done = downloader.next_chunk()
+                                        
+                                    file_bytes = file_io.getvalue()
+                                    
+                                    # Canlı indirilen görselin biyometrik analizini yapıyoruz
+                                    target_identity = extract_pure_biyometric_vector(file_bytes)
+                                    
+                                    if target_identity is not None:
+                                        distance = compare_biyometric_vectors(selfie_identity, target_identity)
+                                        # Cosine distance tolerans eşiği
+                                        if distance < 0.28:
+                                            matched_photos.append(file_bytes)
+                                
+                                progress_text.empty() # Progress barı temizle
+                                
+                                # 3. SONUÇLARI GÖSTERME
+                                if matched_photos:
+                                    st.success(f"🎉 Sizin olduğunuz {len(matched_photos)} fotoğraf bulut albümünden yakalandı!")
+                                    for idx, photo_bytes in enumerate(matched_photos):
+                                        photo_b64 = base64.b64encode(photo_bytes).decode()
+                                        st.markdown(f'<img src="data:image/jpeg;base64,{photo_b64}" class="ai-found-photo">', unsafe_allow_html=True)
+                                        
+                                        st.download_button(
+                                            label="📥 Fotoğrafı İndir",
+                                            data=photo_bytes,
+                                            file_name=f"mustafa_dilruba_dugun_{idx+1}.jpg",
+                                            mime="image/jpeg",
+                                            key=f"download_{idx}"
+                                        )
+                                        st.write("---")
+                                else:
+                                    st.info("Bulut albümünde size ait bir fotoğraf bulunamadı. Başka bir açıyla tekrar poz vermeyi deneyebilirsiniz!")
+                            else:
+                                st.warning("⚠️ Biyometrik analiz başarısız oldu. Lütfen daha aydınlık bir ortamda tekrar poz verin.")
                             
                     except Exception as e:
-                        st.error(f"Arama işlemi sırasında bir hata oluştu: {e}")
+                        st.error(f"Eşitleme/Arama hatası: {e}")
             else:
                 st.error("❌ Google Drive bağlantısı kurulamadı.")
         st.markdown('</div>', unsafe_allow_html=True)
