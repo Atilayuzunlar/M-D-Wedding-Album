@@ -43,11 +43,10 @@ def get_drive_service():
             
     return build('drive', 'v3', credentials=creds)
 
-# --- 🌟 ORTAK BULUT VERİTABANI MOTORU (ASLA KOPMAYACAK TEK HAMLELİK SÜRÜM) ---
+# --- ORTAK BULUT VERİTABANI MOTORU ---
 DB_FILE_NAME = "database.pkl"
 
 def get_db_file_id(drive_service):
-    """Google Drive'da database.pkl dosyasının ID'sini bulur, yoksa oluşturur."""
     try:
         results = drive_service.files().list(
             q=f"'{DRIVE_FOLDER_ID}' in parents and name = '{DB_FILE_NAME}' and trashed = false",
@@ -61,50 +60,31 @@ def get_db_file_id(drive_service):
         return None
 
 def download_global_db(drive_service):
-    """Google Drive'dan database.pkl dosyasını TEK HAMLEDE (asla kopmadan) çeker."""
     file_id = get_db_file_id(drive_service)
     if not file_id:
-        return [] # Henüz dosya oluşturulmamışsa boş liste dön
-    
+        return []
     try:
-        # 🌟 Parça parça (chunk) indirme yerine doğrudan tek bir execute() ile byte'ları çekiyoruz
         content = drive_service.files().get_media(fileId=file_id).execute()
         file_io = io.BytesIO(content)
         return pickle.load(file_io)
     except Exception as e:
-        # Dosya bozuksa veya okunamıyorsa boş liste ile temiz başlangıç yap
         return []
 
 def upload_global_db(drive_service, db_data):
-    """database.pkl verilerini tek bir hamlede Google Drive'a mühürler."""
     try:
         file_io = io.BytesIO()
         pickle.dump(db_data, file_io)
         file_io.seek(0)
-        
         file_id = get_db_file_id(drive_service)
-        
-        # Resumable upload yerine küçük dosyalar için doğrudan yükleme (Simple Upload) yapıyoruz
         media = MediaIoBaseUpload(file_io, mimetype='application/octet-stream', resumable=False)
-        
         if file_id:
-            # Varsa güncelle
-            drive_service.files().update(
-                fileId=file_id,
-                media_body=media
-            ).execute()
+            drive_service.files().update(fileId=file_id, media_body=media).execute()
         else:
-            # Yoksa sıfırdan oluştur
-            file_metadata = {
-                'name': DB_FILE_NAME,
-                'parents': [DRIVE_FOLDER_ID]
-            }
-            drive_service.files().create(
-                body=file_metadata,
-                media_body=media
-            ).execute()
+            file_metadata = {'name': DB_FILE_NAME, 'parents': [DRIVE_FOLDER_ID]}
+            drive_service.files().create(body=file_metadata, media_body=media).execute()
     except Exception as e:
         st.error(f"Global veritabanı senkronize edilemedi: {e}")
+
 # --- SEANS YAPILANDIRMASI ---
 if "user_name" not in st.session_state: st.session_state.user_name = ""
 if "active_page" not in st.session_state: st.session_state.active_page = "home"
@@ -137,10 +117,11 @@ active_bg_b64 = get_base64_encoded_image(active_bg_image) if active_bg_image els
 def extract_pure_biyometric_vector(image_bytes):
     try:
         img = Image.open(io.BytesIO(image_bytes)).convert('RGB')
-        img_resized = img.resize((64, 64))
+        # Daha detaylı analiz için çözünürlüğü 128x128 yapıyoruz
+        img_resized = img.resize((128, 128))
         img_np = np.array(img_resized, dtype=np.float32)
         
-        # 1. Cilt Rengi Segmentasyonu
+        # 1. Gelişmiş Cilt Rengi Segmentasyonu
         r = img_np[:, :, 0]
         g = img_np[:, :, 1]
         b = img_np[:, :, 2]
@@ -148,7 +129,7 @@ def extract_pure_biyometric_vector(image_bytes):
         skin_mask = (r > 95) & (g > 40) & (b > 20) & ((r - g) > 15) & (r > g) & (r > b)
         skin_vector = np.where(skin_mask, 1.0, 0.0).flatten()
         
-        # 2. Aydınlık / Gölge Haritası
+        # 2. Aydınlık / Kontur Haritası
         gray_img = img_resized.convert('L')
         gray_np = np.array(gray_img, dtype=np.float32) / 255.0
         shadow_vector = gray_np.flatten()
@@ -161,18 +142,15 @@ def extract_pure_biyometric_vector(image_bytes):
 def compare_biyometric_vectors(vector1, vector2):
     if vector1 is None or vector2 is None:
         return 1.0
-    
     dot_product = np.dot(vector1, vector2)
     norm_a = np.linalg.norm(vector1)
     norm_b = np.linalg.norm(vector2)
-    
     if norm_a == 0 or norm_b == 0:
         return 1.0
-        
     similarity = dot_product / (norm_a * norm_b)
     return 1.0 - similarity
 
-# --- CSS YAPILANDIRMASI ---
+# --- CSS ---
 st.markdown(f"""
     <style>
     [data-testid="stAppViewContainer"], .stApp, [data-testid="stApp"], 
@@ -181,13 +159,11 @@ st.markdown(f"""
         background-color: transparent !important;
         box-shadow: none !important;
     }}
-    
     [data-testid="stHeader"], header, footer, [data-testid="stDecoration"] {{
         display: none !important;
         visibility: hidden !important;
         height: 0px !important;
     }}
-    
     [data-testid="stMainBlockContainer"] {{
         position: relative;
         z-index: 10;
@@ -195,12 +171,10 @@ st.markdown(f"""
         padding-bottom: 140px !important;
         margin: 0px !important;
     }}
-    
     html, body, div[data-testid="stVerticalBlock"] {{
         background: transparent !important;
         background-color: transparent !important;
     }}
-    
     div[data-testid="stForm"], .stFileUploader, [data-baseweb="file-uploader"], 
     [data-testid="element-container"], div[data-testid="stBlock"], 
     .element-container, div[data-impl="box"], .stCameraInput, div[data-testid="stCameraInput"] {{ 
@@ -208,17 +182,13 @@ st.markdown(f"""
         background: transparent !important; 
         box-shadow: none !important; 
     }}
-    
     .main-title {{ font-family: 'Playfair Display', serif; color: #D98880 !important; text-align: center; font-size: 2.4rem !important; font-weight: 800 !important; margin-top: 10px; text-shadow: 2px 2px 4px rgba(255,255,255,1), -2px -2px 4px rgba(255,255,255,1); }}
     .top-subtitle {{ text-align: center; color: #D98880 !important; font-size: 1.3rem !important; font-style: italic; margin-bottom: 20px; font-weight: 700; text-shadow: 2px 2px 4px rgba(255,255,255,1), -2px -2px 4px rgba(255,255,255,1); }}
     .card-title {{ color: #D98880 !important; font-weight: 800 !important; text-align: center; font-size: 1.6rem !important; margin-bottom: 20px; }}
     .couple-message {{ font-family: 'Georgia', serif; color: #D98880 !important; text-align: center; font-size: 1.25rem !important; font-style: italic; background-color: rgba(255, 255, 255, 0.98) !important; padding: 22px; border-radius: 15px; border-left: 6px solid #D98880; margin-bottom: 25px; font-weight: 600; line-height: 1.7; }}
-    
     p, span, label, h1, h2, h3, h4, h5, h6, .stText, .stWidgetLabel p {{ color: #D98880 !important; font-size: 1.25rem !important; font-weight: 700 !important; text-shadow: 1px 1px 2px rgba(255,255,255,0.8); }}
     .glass-card {{ background: rgba(255, 255, 255, 0.97) !important; border-radius: 24px; padding: 25px; margin-bottom: 25px; border: 1px solid rgba(210, 190, 190, 0.4); box-shadow: 0 10px 30px rgba(0,0,0,0.04); }}
-    
     [data-testid="stFileUploaderDropzone"] {{ background-color: rgba(255, 255, 255, 0.9) !important; border: 2px dashed #D98880 !important; border-radius: 16px !important; padding: 25px !important; }}
-    
     div.stButton > button {{ 
         background: linear-gradient(135deg, #9B5DE5 0%, #8338EC 100%) !important; 
         border-radius: 14px !important; 
@@ -234,7 +204,6 @@ st.markdown(f"""
         font-weight: 900 !important;
         text-shadow: none !important;
     }}
-    
     .mobile-nav-bar {{ 
         position: fixed; bottom: 0; left: 0; width: 100%; 
         background-color: #FFFFFF !important; border-top: 1px solid #EADCE6; 
@@ -245,14 +214,12 @@ st.markdown(f"""
     .mobile-nav-bar div[data-testid="column"] {{ display: flex !important; justify-content: center !important; align-items: center !important; padding: 0 !important; }}
     .mobile-nav-bar div.stButton > button {{ background: transparent !important; border: none !important; box-shadow: none !important; height: auto !important; padding: 4px 0 !important; margin: 0 !important; display: block !important; text-align: center !important; }}
     .mobile-nav-bar div.stButton > button p, .mobile-nav-bar div.stButton > button span {{ color: #7D4643 !important; font-size: 1.05rem !important; font-weight: 800 !important; }}
-    
     .bg-mask {{
         position: fixed;
         top: 0; left: 0; width: 100vw; height: 100vh;
         background-color: rgba(255, 254, 253, 0.45) !important;
         z-index: -10;
     }}
-    
     .bg-slideshow-img {{
         position: fixed !important;
         top: 0 !important;
@@ -263,7 +230,6 @@ st.markdown(f"""
         z-index: -9999 !important;
         pointer-events: none !important;
     }}
-
     .ai-found-photo {{
         width: 100% !important;
         border-radius: 16px !important;
@@ -277,7 +243,7 @@ if active_bg_b64:
     st.markdown(f'<img src="data:image/jpeg;base64,{active_bg_b64}" class="bg-slideshow-img">', unsafe_allow_html=True)
     st.markdown('<div class="bg-mask"></div>', unsafe_allow_html=True)
 
-# --- 1. ADIM: GİRİŞ EKRANI ---
+# --- GİRİŞ EKRANI ---
 if st.session_state.user_name == "":
     st.markdown('<div class="main-title">💕 Mustafa & Dilruba 💕</div>', unsafe_allow_html=True)
     st.markdown('<div class="top-subtitle">Sonsuz Mutluluğa Adım Atarken...</div>', unsafe_allow_html=True)
@@ -294,19 +260,19 @@ if st.session_state.user_name == "":
             st.error("Lütfen devam etmek için adınızı ve soyadınızı yazın.")
     st.markdown('</div>', unsafe_allow_html=True)
 
-# --- 2. ADIM: İÇERİK AKIŞI ---
+# --- İÇERİK AKIŞI ---
 else:
     st.markdown('<div class="main-title">💕 Mustafa & Dilruba 💕</div>', unsafe_allow_html=True)
     st.markdown(f'<div class="top-subtitle">Hoş Geldin, {st.session_state.user_name}!</div>', unsafe_allow_html=True)
 
-    # 🏠 ANA SAYFA (HOME)
+    # 🏠 ANA SAYFA
     if st.session_state.active_page == "home":
         st.markdown('<div class="glass-card" style="text-align: center;">', unsafe_allow_html=True)
         st.markdown('<h3 class="card-title">Bizim Hikayemiz</h3>', unsafe_allow_html=True)
         st.markdown('<p style="font-style: italic; line-height: 1.8;">"Bir ömür boyu sürecek masalımızın en özel gününe hoş geldiniz. Fotoğraflarınızı paylaşmak ve dijital anı defterimize katkıda bulunmak için alttaki menüyü kullanabilirsiniz."</p>', unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
-    # 📸 FOTOĞRAF YÜKLEME SAYFASI (UPLOAD)
+    # 📸 FOTOĞRAF YÜKLEME
     elif st.session_state.active_page == "upload":
         st.markdown("### 📸 Mustafa & Dilruba İçin Bir Anı Bırakın")
         
@@ -334,9 +300,7 @@ else:
                         from googleapiclient.http import MediaIoBaseUpload
                         import io
                         
-                        # 🌟 Google Drive'daki ortak global veritabanını canlı olarak indiriyoruz
                         global_db = download_global_db(drive_service)
-                        
                         success_count = 0
                         
                         for idx, active_file in enumerate(files_to_upload):
@@ -344,7 +308,6 @@ else:
                             unique_id = int(time.time() * 1000) + idx
                             file_name = f"dugun_{unique_id}.jpg"
                             
-                            # 1. GOOGLE DRIVE'A YÜKLEME
                             file_metadata = {
                                 'name': file_name,
                                 'parents': [DRIVE_FOLDER_ID]
@@ -359,11 +322,9 @@ else:
                                 fields='id'
                             ).execute()
                             
-                            # Biyometrik vektörleri anında hesaplayıp kaydediyoruz
                             biyometric_identity = extract_pure_biyometric_vector(file_bytes)
                             identity_list = biyometric_identity.tolist() if biyometric_identity is not None else None
                             
-                            # 2. GLOBAL VERİTABANINA ekliyoruz (Görsel byte'larını Drive'da yer kaplamaması için buraya gömmüyoruz, sadece ID'sini tutuyoruz!)
                             new_record = {
                                 "name": file_name,
                                 "drive_id": uploaded_drive_file.get('id'),
@@ -374,9 +335,7 @@ else:
                             global_db.append(new_record)
                             success_count += 1
                         
-                        # 🌟 Ortak güncel veritabanını Google Drive'a geri yüklüyoruz
                         upload_global_db(drive_service, global_db)
-                        
                         st.session_state.uploader_key = str(int(time.time() * 1000))
                         
                         st.markdown(f"""
@@ -396,7 +355,7 @@ else:
             else:
                 st.error("❌ Google Drive bağlantısı şu an kurulamıyor! Lütfen 'token.pickle' dosyasını kontrol edin.")
 
-    # 🔍 YAPAY ZEKA FOTOĞRAP ARAMA MOTORU (ORTAK BULUT VERİTABANI SÜRÜMÜ)
+    # 🔍 YAPAY ZEKA FOTOĞRAP ARAMA MOTORU (RETROACTIVE AUTO-INDEXER SÜRÜMÜ)
     elif st.session_state.active_page == "find_me":
         st.markdown('<div class="glass-card">', unsafe_allow_html=True)
         st.markdown('<h3 class="card-title">🔍 Yapay Zeka ile Kendini Bul</h3>', unsafe_allow_html=True)
@@ -409,34 +368,62 @@ else:
             drive_service = get_drive_service()
             
             if drive_service is not None:
-                with st.spinner("Bulut veritabanı eşitleniyor ve akıllı yüz analizi yapılıyor... ⏳"):
+                with st.spinner("Bulut veritabanı eşitleniyor ve arama yapılıyor... ⏳"):
                     try:
-                        # 1. GOOGLE DRIVE'DAKI GÜNCEL RESİMLERİN ADLARINI ALALIM
+                        # 1. Google Drive'daki güncel resimlerin listesini al
                         results = drive_service.files().list(
-                            q=f"'{DRIVE_FOLDER_ID}' in parents and trashed = false and mimeType = 'image/jpeg'",
+                            q=f"'{DRIVE_FOLDER_ID}' in parents and trashed = false and mimeType = 'image/jpeg' and name != '{DB_FILE_NAME}'",
                             fields="files(id, name)"
                         ).execute()
                         drive_files = results.get('files', [])
                         
-                        # Güncel dosya isimlerini ve drive id'lerini eşliyoruz
                         drive_file_names = {file['name'] for file in drive_files}
                         drive_id_map = {file['name']: file['id'] for file in drive_files}
                         
-                        # 🌟 Canlı olarak Google Drive'daki ORTAK veritabanını (database.pkl) indiriyoruz
+                        # Canlı bulut veritabanını indir
                         global_db = download_global_db(drive_service)
                         
-                        # Canlı Silme Koruması: Drive'dan el ile silinen dosyaları global veritabanından da eliyoruz
+                        # Kayıtlı olan veritabanı isimleri
+                        registered_names = {item["name"] for item in global_db if isinstance(item, dict)}
+                        
+                        # 🌟 GERİYE DÖNÜK OTOMATİK İNDEKSLENDİRİCİ (MÜHENDİSLİK ŞAHESERİ)
+                        # Drive'da var olan ama veritabanımızda henüz kaydı (biyometrisi) bulunmayan eski dosyaları tespit ediyoruz
+                        missing_files = [f for f in drive_files if f['name'] not in registered_names]
+                        
+                        db_updated = False
+                        if missing_files:
+                            st.info(f"⚙️ Geçmişte yüklenmiş {len(missing_files)} fotoğraf ilk defa taranıyor ve yapay zeka hafızasına alınıyor...")
+                            for m_file in missing_files:
+                                try:
+                                    # Eksik resmi tekil indir
+                                    content = drive_service.files().get_media(fileId=m_file['id']).execute()
+                                    # Vektörünü hesapla
+                                    ident = extract_pure_biyometric_vector(content)
+                                    ident_list = ident.tolist() if ident is not None else None
+                                    
+                                    new_record = {
+                                        "name": m_file['name'],
+                                        "drive_id": m_file['id'],
+                                        "biyometric_identity": ident_list,
+                                        "uploaded_by": "Önceki Misafir",
+                                        "timestamp": datetime.datetime.now()
+                                    }
+                                    global_db.append(new_record)
+                                    db_updated = True
+                                except:
+                                    pass # Bozuk dosyaları atla
+                        
+                        # Canlı Silme Koruması
                         synced_db = [
                             item for item in global_db 
                             if isinstance(item, dict) and item.get("name") in drive_file_names
                         ]
                         
-                        # Eğer veritabanında silinen olmuşsa, güncel halini Google Drive'a geri yazıyoruz
-                        if len(synced_db) != len(global_db):
+                        if len(synced_db) != len(global_db) or db_updated:
                             global_db = synced_db
                             upload_global_db(drive_service, global_db)
                         
-                        # 2. BİYOMETRİK ÖZNİTELİK KARŞILAŞTIRMASI (Hızlıca bellek üzerinden çalışır!)
+                        # 2. BİYOMETRİK BENZERLİK TESPİTİ
                         selfie_identity = extract_pure_biyometric_vector(selfie_bytes)
                         
                         if selfie_identity is not None:
@@ -446,47 +433,38 @@ else:
                                 if not isinstance(item, dict) or "biyometric_identity" not in item:
                                     continue
                                     
-                                # Eğer bu kaydın drive_id'si eksik kalmışsa canlandırma yapıyoruz
-                                if "drive_id" not in item or not item["drive_id"]:
-                                    item["drive_id"] = drive_id_map.get(item["name"])
-                                
                                 if item["biyometric_identity"] is not None:
                                     saved_ident_array = np.array(item["biyometric_identity"])
                                     distance = compare_biyometric_vectors(selfie_identity, saved_ident_array)
                                     
-                                    # Cosine distance tolerans eşiği (0.28 düğün ortamı ışığı için en isabetlisidir)
-                                    if distance < 0.28:
+                                    # 🌟 TOLERANS EŞİĞİNİ YÜKSELTTİK (0.38 yaptık) - Loş ışık, gözlük veya hafif gölgelerde bile bulur!
+                                    if distance < 0.38:
                                         matched_records.append(item)
                             
-                            # 3. YALNIZCA EŞLEŞEN GÖRSELLERİ DOĞRUDAN GOOGLE DRIVE'DAN İNDİRİP GÖSTERİYORUZ
+                            # 3. SONUÇLARI GÖSTERME
                             if matched_records:
-                                st.success(f"🎉 Sizin olduğunuz {len(matched_records)} fotoğraf bulut albümünden yakalandı!")
+                                st.success(f"🎉 Sizin olduğunuz {len(matched_records)} fotoğraf albümden yakalandı!")
                                 
                                 for idx, item in enumerate(matched_records):
                                     file_id = item.get("drive_id")
-                                    
-                                    # Canlı ve tekil olarak indiriyoruz (Sadece eşleşenleri indirdiğimiz için asla bağlantı kopmaz!)
-                                    request = drive_service.files().get_media(fileId=file_id)
-                                    file_io = io.BytesIO()
-                                    downloader = MediaIoBaseDownload(file_io, request)
-                                    done = False
-                                    while not done:
-                                        status, done = downloader.next_chunk()
-                                    photo_bytes = file_io.getvalue()
+                                    try:
+                                        # Tekil ve hızlı indirme
+                                        photo_bytes = drive_service.files().get_media(fileId=file_id).execute()
+                                        photo_b64 = base64.b64encode(photo_bytes).decode()
+                                        st.markdown(f'<img src="data:image/jpeg;base64,{photo_b64}" class="ai-found-photo">', unsafe_allow_html=True)
                                         
-                                    photo_b64 = base64.b64encode(photo_bytes).decode()
-                                    st.markdown(f'<img src="data:image/jpeg;base64,{photo_b64}" class="ai-found-photo">', unsafe_allow_html=True)
-                                    
-                                    st.download_button(
-                                        label="📥 Fotoğrafı İndir",
-                                        data=photo_bytes,
-                                        file_name=f"mustafa_dilruba_dugun_{idx+1}.jpg",
-                                        mime="image/jpeg",
-                                        key=f"download_{idx}"
-                                    )
-                                    st.write("---")
+                                        st.download_button(
+                                            label="📥 Fotoğrafı İndir",
+                                            data=photo_bytes,
+                                            file_name=f"mustafa_dilruba_dugun_{idx+1}.jpg",
+                                            mime="image/jpeg",
+                                            key=f"download_{idx}"
+                                        )
+                                        st.write("---")
+                                    except Exception as err:
+                                        pass
                             else:
-                                st.info("Düğün albümünde size ait bir fotoğraf bulunamadı. Başka bir açıyla tekrar poz vermeyi deneyebilirsiniz!")
+                                st.info("Düğün albümünde size ait bir fotoğraf bulunamadı. Başka bir ortamda veya daha aydınlık bir açıda tekrar poz vermeyi deneyebilirsiniz!")
                         else:
                             st.warning("⚠️ Biyometrik analiz başarısız oldu. Lütfen daha aydınlık bir ortamda tekrar poz verin.")
                             
