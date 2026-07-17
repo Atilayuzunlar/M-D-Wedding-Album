@@ -269,7 +269,7 @@ else:
             else:
                 st.error("❌ Google Drive bağlantısı şu an kurulamıyor! Lütfen 'token.pickle' dosyasını kontrol edin.")
 
-    # 🔍 YAPAY ZEKA FOTOĞRAF ARAMA MOTORU (FIND ME)
+ # 🔍 YAPAY ZEKA FOTOĞRAP ARAMA MOTORU (FIND ME)
     elif st.session_state.active_page == "find_me":
         st.markdown('<div class="glass-card">', unsafe_allow_html=True)
         st.markdown('<h3 class="card-title">🔍 Yapay Zeka ile Kendini Bul</h3>', unsafe_allow_html=True)
@@ -284,13 +284,26 @@ else:
                     valid_photos = [item["bytes"] for item in st.session_state.db if isinstance(item, dict) and "bytes" in item]
                     if valid_photos:
                         st.success(f"📸 Sizin olduğunuz {len(valid_photos)} anı yakalandı!")
-                        for photo_bytes in valid_photos: st.image(photo_bytes, use_container_width=True)
+                        
+                        # Her bulunan fotoğrafı ve altına indirme butonunu yerleştiriyoruz
+                        for idx, photo_bytes in enumerate(valid_photos):
+                            # Fotoğrafı ekranda göster
+                            st.image(photo_bytes, use_container_width=True)
+                            
+                            # 📥 İndirme Butonu (Her fotoğraf için benzersiz anahtarla oluşturulur)
+                            st.download_button(
+                                label="📥 Fotoğrafı İndir",
+                                data=photo_bytes,
+                                file_name=f"mustafa_dilruba_dugun_{idx+1}.jpg",
+                                mime="image/jpeg",
+                                key=f"download_{idx}"
+                            )
+                            st.write("---") # Fotoğraflar arasına tatlı bir ayraç çizgisi
                     else:
                         st.info("Albümde henüz geçerli bir fotoğraf bulunamadı.")
                 else:
                     st.info("Albümde henüz fotoğraf bulunamadı. Önce 'Fotoğraf At' kısmından bir şeyler yükleyin.")
         st.markdown('</div>', unsafe_allow_html=True)
-
     # 📋 PROGRAM SAYFASI
     elif st.session_state.active_page == "program":
         st.markdown('<div class="glass-card">', unsafe_allow_html=True)
