@@ -266,7 +266,6 @@ else:
                                 fields='id'
                             ).execute()
                             
-                            # 2. VERİTABANINA YAZMA (Sadece ham byte saklıyoruz, tarayıcı JS'i okuyacak)
                             new_record = {
                                 "name": file_name,
                                 "bytes": file_bytes,
@@ -296,7 +295,7 @@ else:
             else:
                 st.error("❌ Google Drive bağlantısı şu an kurulamıyor! Lütfen 'token.pickle' dosyasını kontrol edin.")
 
-    # 🔍 YAPAY ZEKA FOTOĞRAP ARAMA MOTORU (BROWSER-SIDE CLIENT AI SÜRÜMÜ)
+    # 🔍 YAPAY ZEKA FOTOĞRAP ARAMA MOTORU (BROWSER-SIDE CLIENT AI SÜRÜMÜ - GÜVENLİ CDN)
     elif st.session_state.active_page == "find_me":
         st.markdown('<div class="glass-card">', unsafe_allow_html=True)
         st.markdown('<h3 class="card-title">🔍 Yapay Zeka ile Kendini Bul</h3>', unsafe_allow_html=True)
@@ -311,7 +310,6 @@ else:
             if drive_service is not None:
                 with st.spinner("Drive ile eşitleme yapılıyor... ⏳"):
                     try:
-                        # 1. DRIVE SENKRONİZASYONU (Sadece mevcut olanlar)
                         results = drive_service.files().list(
                             q=f"'{DRIVE_FOLDER_ID}' in parents and trashed = false",
                             fields="files(name)"
@@ -328,7 +326,6 @@ else:
                             st.session_state.db = synced_db
                             save_db(st.session_state.db)
                             
-                        # Resimleri JS'e aktarmak için liste hazırlıyoruz
                         selfie_b64 = base64.b64encode(selfie_bytes).decode()
                         db_photos_json = []
                         for idx, item in enumerate(st.session_state.db):
@@ -343,17 +340,15 @@ else:
                         st.error(f"Eşitleme hatası: {e}")
                         db_photos_json = []
                 
-                # 2. 🌟 BROWSER-SIDE FACE-API.JS ENJEKSİYONU (Sıfır Sunucu Yükü)
                 if len(db_photos_json) > 0:
                     st.info("Yapay Zeka arama işlemi tarayıcınızda yerel olarak çalıştırılıyor... ⚡")
                     
-                    # HTML + JS Enjeksiyonu ile yüz tanıma motorunu çalıştırıyoruz
                     import json
                     photos_serialized = json.dumps(db_photos_json)
                     
                     st.components.v1.html(f"""
                         <div id="status-message" style="color: #D98880; font-family: sans-serif; font-weight: bold; text-align: center; margin-bottom: 15px;">
-                            🤖 Yüz analizi başlatılıyor, lütfen bekleyin...
+                            🤖 Yapay zeka motoru hazırlanıyor, lütfen bekleyin...
                         </div>
                         <div id="results-container" style="display: flex; flex-direction: column; gap: 15px;"></div>
 
@@ -361,25 +356,35 @@ else:
                         <script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api/dist/face-api.js"></script>
                         
                         <script>
+                        // 🌟 Kütüphanenin tamamen tarayıcıya inmesini ve global değişkenin oluşmasını bekleyen güvence mekanizması
+                        function waitForFaceAPI(callback) {{
+                            if (typeof faceapi !== "undefined" && faceapi.nets) {{
+                                callback();
+                            }} else {{
+                                setTimeout(function() {{
+                                    waitForFaceAPI(callback);
+                                }}, 200); // 200 milisaniyede bir kontrol et
+                            }}
+                        }}
+
                         async function runAI() {{
                             const status = document.getElementById('status-message');
                             const resultsContainer = document.getElementById('results-container');
                             
                             try {{
-                                status.innerText = "🧠 Yapay Zeka modelleri yükleniyor (yaklaşık 3-5 saniye)...";
-                                // Modelleri Vladmandic CDN üzerinden asenkron çekiyoruz
-                                const MODEL_URL = 'https://vladmandic.github.io/face-api/model/';
+                                status.innerText = "🧠 Yapay Zeka modelleri CDN'den indiriliyor (3-5 saniye)...";
+                                
+                                // Modelleri güvenli Vladmandic CDN üzerinden asenkron yüklüyoruz
+                                const MODEL_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model/';
                                 await faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL);
                                 await faceapi.nets.faceLandmarks68Net.loadFromUri(MODEL_URL);
                                 await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
                                 
                                 status.innerText = "📸 Selfie analizi yapılıyor...";
-                                // Selfie görselini DOM'a yükle
                                 const selfieImg = new Image();
                                 selfieImg.src = "data:image/jpeg;base64,{selfie_b64}";
                                 await new Promise(resolve => selfieImg.onload = resolve);
                                 
-                                // Selfie yüz kodlamasını hesapla
                                 const selfieDetection = await faceapi.detectSingleFace(selfieImg).withFaceLandmarks().withFaceDescriptor();
                                 if (!selfieDetection) {{
                                     status.innerText = "⚠️ Selfie üzerinde net bir yüz bulunamadı! Lütfen daha aydınlık bir ortamda tekrar deneyin.";
@@ -387,7 +392,7 @@ else:
                                 }}
                                 
                                 const targetDescriptor = selfieDetection.descriptor;
-                                const faceMatcher = new faceapi.FaceMatcher(targetDescriptor, 0.55); // Eşik değeri 0.55
+                                const faceMatcher = new faceapi.FaceMatcher(targetDescriptor, 0.55); // Hassasiyet toleransı 0.55
                                 
                                 status.innerText = "🔍 Albümdeki tüm fotoğraflar taranıyor...";
                                 const dbPhotos = {photos_serialized};
@@ -398,7 +403,6 @@ else:
                                     dbImg.src = "data:image/jpeg;base64," + item.b64;
                                     await new Promise(resolve => dbImg.onload = resolve);
                                     
-                                    // Fotoğraftaki tüm yüzleri bul
                                     const detections = await faceapi.detectAllFaces(dbImg).withFaceLandmarks().withFaceDescriptors();
                                     
                                     for (let det of detections) {{
@@ -406,9 +410,8 @@ else:
                                         if (bestMatch.label !== 'unknown') {{
                                             matchCount++;
                                             
-                                            // Eşleşen görsel kartını oluştur ve DOM'a ekle
                                             const wrapper = document.createElement('div');
-                                            wrapper.style = "background: rgba(255, 255, 255, 0.95); border-radius: 16px; padding: 15px; text-align: center; border: 1px solid rgba(217, 136, 128, 0.3);";
+                                            wrapper.style = "background: rgba(255, 255, 255, 0.95); border-radius: 16px; padding: 15px; text-align: center; border: 1px solid rgba(217, 136, 128, 0.3); margin-bottom: 15px;";
                                             
                                             const img = document.createElement('img');
                                             img.src = dbImg.src;
@@ -418,12 +421,12 @@ else:
                                             btn.href = dbImg.src;
                                             btn.download = "mustafa_dilruba_dugun_" + matchCount + ".jpg";
                                             btn.innerText = "📥 Fotoğrafı İndir";
-                                            btn.style = "display: block; background: linear-gradient(135deg, #9B5DE5 0%, #8338EC 100%); color: #FFFFFF; text-decoration: none; padding: 12px; border-radius: 10px; font-weight: bold; font-family: sans-serif;";
+                                            btn.style = "display: block; background: linear-gradient(135deg, #9B5DE5 0%, #8338EC 100%); color: #FFFFFF; text-decoration: none; padding: 12px; border-radius: 10px; font-weight: bold; font-family: sans-serif; cursor: pointer;";
                                             
                                             wrapper.appendChild(img);
                                             wrapper.appendChild(btn);
                                             resultsContainer.appendChild(wrapper);
-                                            break; // Bu resim için bir eşleşme yetti
+                                            break;
                                         }}
                                     }}
                                 }}
@@ -440,7 +443,9 @@ else:
                                 console.error(err);
                             }}
                         }}
-                        runAI();
+
+                        // 🌟 Kütüphanenin tam yüklendiğinden emin olup asenkron tetikliyoruz
+                        waitForFaceAPI(runAI);
                         </script>
                     """, height=650)
                 else:
