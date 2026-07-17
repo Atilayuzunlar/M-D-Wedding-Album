@@ -43,47 +43,70 @@ def get_drive_service():
             
     return build('drive', 'v3', credentials=creds)
 
-# --- ORTAK BULUT VERİTABANI MOTORU ---
+# --- 🌟 BAĞLANTI KOPMALARINA KARŞI OTOMATİK RETRY SİSTEMLİ VERİTABANI MOTORU ---
 DB_FILE_NAME = "database.pkl"
 
-def get_db_file_id(drive_service):
-    try:
-        results = drive_service.files().list(
-            q=f"'{DRIVE_FOLDER_ID}' in parents and name = '{DB_FILE_NAME}' and trashed = false",
-            fields="files(id)"
-        ).execute()
-        files = results.get('files', [])
-        if files:
-            return files[0]['id']
-        return None
-    except:
-        return None
+def get_db_file_id_with_retry(drive_service, retries=3):
+    """Google Drive'da database.pkl dosyasının ID'sini bulur (Hata toleranslı)."""
+    for attempt in range(retries):
+        try:
+            results = drive_service.files().list(
+                q=f"'{DRIVE_FOLDER_ID}' in parents and name = '{DB_FILE_NAME}' and trashed = false",
+                fields="files(id)"
+            ).execute()
+            files = results.get('files', [])
+            if files:
+                return files[0]['id']
+            return None
+        except Exception as e:
+            if attempt == retries - 1:
+                raise e
+            time.sleep(0.5) # Bağlantı kopmasında yarım saniye bekle ve tekrar dene
+    return None
 
-def download_global_db(drive_service):
-    file_id = get_db_file_id(drive_service)
+def download_global_db_with_retry(drive_service, retries=3):
+    """database.pkl dosyasını tek hamlede indirir (Bağlantı kopsa bile otomatik dener)."""
+    file_id = get_db_file_id_with_retry(drive_service)
     if not file_id:
         return []
-    try:
-        content = drive_service.files().get_media(fileId=file_id).execute()
-        file_io = io.BytesIO(content)
-        return pickle.load(file_io)
-    except Exception as e:
-        return []
+    
+    for attempt in range(retries):
+        try:
+            content = drive_service.files().get_media(fileId=file_id).execute()
+            file_io = io.BytesIO(content)
+            return pickle.load(file_io)
+        except Exception as e:
+            if attempt == retries - 1:
+                # Son denemede de başarısız olursa boş liste dönerek akışı kurtar
+                return []
+            time.sleep(0.5)
+    return []
 
-def upload_global_db(drive_service, db_data):
+def upload_global_db_with_retry(drive_service, db_data, retries=3):
+    """database.pkl verilerini Google Drive'a mühürler (Broken Pipe korumalı)."""
     try:
         file_io = io.BytesIO()
         pickle.dump(db_data, file_io)
         file_io.seek(0)
-        file_id = get_db_file_id(drive_service)
-        media = MediaIoBaseUpload(file_io, mimetype='application/octet-stream', resumable=False)
-        if file_id:
-            drive_service.files().update(fileId=file_id, media_body=media).execute()
-        else:
-            file_metadata = {'name': DB_FILE_NAME, 'parents': [DRIVE_FOLDER_ID]}
-            drive_service.files().create(body=file_metadata, media_body=media).execute()
+        
+        file_id = get_db_file_id_with_retry(drive_service)
+        # Kararlılık için resumable=True (bölünebilir yükleme) yapıyoruz, böylece yarıda kesilmez
+        media = MediaIoBaseUpload(file_io, mimetype='application/octet-stream', resumable=True)
+        
+        for attempt in range(retries):
+            try:
+                if file_id:
+                    drive_service.files().update(fileId=file_id, media_body=media).execute()
+                else:
+                    file_metadata = {'name': DB_FILE_NAME, 'parents': [DRIVE_FOLDER_ID]}
+                    drive_service.files().create(body=file_metadata, media_body=media).execute()
+                break # Başarılı olursa döngüden çık
+            except Exception as e:
+                if attempt == retries - 1:
+                    st.error(f"⚠️ Bulut veritabanı senkronizasyon hatası: {e}")
+                time.sleep(0.5)
     except Exception as e:
-        st.error(f"Global veritabanı senkronize edilemedi: {e}")
+        st.error(f"Veri hazırlama hatası: {e}")
 
 # --- SEANS YAPILANDIRMASI ---
 if "user_name" not in st.session_state: st.session_state.user_name = ""
@@ -329,7 +352,7 @@ else:
                         from googleapiclient.http import MediaIoBaseUpload
                         import io
                         
-                        global_db = download_global_db(drive_service)
+                        global_db = download_global_db_with_retry(drive_service)
                         success_count = 0
                         
                         for idx, active_file in enumerate(files_to_upload):
@@ -364,7 +387,7 @@ else:
                             global_db.append(new_record)
                             success_count += 1
                         
-                        upload_global_db(drive_service, global_db)
+                        upload_global_db_with_retry(drive_service, global_db)
                         st.session_state.uploader_key = str(int(time.time() * 1000))
                         
                         st.markdown(f"""
@@ -384,7 +407,7 @@ else:
             else:
                 st.error("❌ Google Drive bağlantısı şu an kurulamıyor! Lütfen 'token.pickle' dosyasını kontrol edin.")
 
-    # 🔍 YAPAY ZEKA FOTOĞRAP ARAMA MOTORU
+    # 🔍 YAPAY ZEKA FOTOĞRAP ARAMA MOTORU (KESİNTİSİZ RETRY SÜRÜMÜ)
     elif st.session_state.active_page == "find_me":
         st.markdown("""
         <div class="glass-card">
@@ -410,7 +433,8 @@ else:
                         drive_file_names = {file['name'] for file in drive_files}
                         drive_id_map = {file['name']: file['id'] for file in drive_files}
                         
-                        global_db = download_global_db(drive_service)
+                        # 🌟 Bağlantı kopmalarına dirençli indirme
+                        global_db = download_global_db_with_retry(drive_service)
                         registered_names = {item["name"] for item in global_db if isinstance(item, dict)}
                         
                         missing_files = [f for f in drive_files if f['name'] not in registered_names]
@@ -420,19 +444,28 @@ else:
                             st.info(f"⚙️ Geçmişte yüklenmiş {len(missing_files)} fotoğraf ilk defa taranıyor ve yapay zeka hafızasına alınıyor...")
                             for m_file in missing_files:
                                 try:
-                                    content = drive_service.files().get_media(fileId=m_file['id']).execute()
-                                    ident = extract_pure_biyometric_vector(content)
-                                    ident_list = ident.tolist() if ident is not None else None
-                                    
-                                    new_record = {
-                                        "name": m_file['name'],
-                                        "drive_id": m_file['id'],
-                                        "biyometric_identity": ident_list,
-                                        "uploaded_by": "Önceki Misafir",
-                                        "timestamp": datetime.datetime.now()
-                                    }
-                                    global_db.append(new_record)
-                                    db_updated = True
+                                    # Tekil indirmede hata toleranslı çekim
+                                    content = None
+                                    for attempt in range(3):
+                                        try:
+                                            content = drive_service.files().get_media(fileId=m_file['id']).execute()
+                                            break
+                                        except:
+                                            time.sleep(0.5)
+                                            
+                                    if content is not None:
+                                        ident = extract_pure_biyometric_vector(content)
+                                        ident_list = ident.tolist() if ident is not None else None
+                                        
+                                        new_record = {
+                                            "name": m_file['name'],
+                                            "drive_id": m_file['id'],
+                                            "biyometric_identity": ident_list,
+                                            "uploaded_by": "Önceki Misafir",
+                                            "timestamp": datetime.datetime.now()
+                                        }
+                                        global_db.append(new_record)
+                                        db_updated = True
                                 except:
                                     pass
                         
@@ -443,7 +476,8 @@ else:
                         
                         if len(synced_db) != len(global_db) or db_updated:
                             global_db = synced_db
-                            upload_global_db(drive_service, global_db)
+                            # 🌟 Broken pipe korumalı yükleme tetiklemesi
+                            upload_global_db_with_retry(drive_service, global_db)
                         
                         selfie_identity = extract_pure_biyometric_vector(selfie_bytes)
                         
@@ -467,18 +501,27 @@ else:
                                 for idx, item in enumerate(matched_records):
                                     file_id = item.get("drive_id")
                                     try:
-                                        photo_bytes = drive_service.files().get_media(fileId=file_id).execute()
-                                        photo_b64 = base64.b64encode(photo_bytes).decode()
-                                        st.markdown(f'<img src="data:image/jpeg;base64,{photo_b64}" class="ai-found-photo">', unsafe_allow_html=True)
-                                        
-                                        st.download_button(
-                                            label="📥 Fotoğrafı İndir",
-                                            data=photo_bytes,
-                                            file_name=f"mustafa_dilruba_dugun_{idx+1}.jpg",
-                                            mime="image/jpeg",
-                                            key=f"download_{idx}"
-                                        )
-                                        st.markdown('<div style="margin-bottom: 25px;"></div>', unsafe_allow_html=True)
+                                        # 🌟 Tekil indirmede hata toleranslı deneme döngüsü
+                                        photo_bytes = None
+                                        for attempt in range(3):
+                                            try:
+                                                photo_bytes = drive_service.files().get_media(fileId=file_id).execute()
+                                                break
+                                            except:
+                                                time.sleep(0.5)
+                                                
+                                        if photo_bytes is not None:
+                                            photo_b64 = base64.b64encode(photo_bytes).decode()
+                                            st.markdown(f'<img src="data:image/jpeg;base64,{photo_b64}" class="ai-found-photo">', unsafe_allow_html=True)
+                                            
+                                            st.download_button(
+                                                label="📥 Fotoğrafı İndir",
+                                                data=photo_bytes,
+                                                file_name=f"mustafa_dilruba_dugun_{idx+1}.jpg",
+                                                mime="image/jpeg",
+                                                key=f"download_{idx}"
+                                            )
+                                            st.markdown('<div style="margin-bottom: 25px;"></div>', unsafe_allow_html=True)
                                     except Exception as err:
                                         pass
                             else:
@@ -494,7 +537,6 @@ else:
 
     # 📋 PROGRAM SAYFASI
     elif st.session_state.active_page == "program":
-        # 🌟 YENİ GÜNCEL AKIŞ SAATLERİ BURAYA İŞLENDİ
         st.markdown("""
         <div class="glass-card">
             <h3 class="card-title">✨ Düğün Akış Programı ✨</h3>
