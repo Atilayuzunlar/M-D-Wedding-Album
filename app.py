@@ -83,45 +83,62 @@ if images_b64:
         bg_css_steps += f"  {start}%, {mid}% {{ background-image: url('data:image/jpeg;base64,{b64}'); }}\n"
     bg_css_steps += "}"
 
-# --- CSS İÇİN SÜRE HESAPLAMASI (Python tarafında önceden yapılıyor) ---
+# --- CSS İÇİN SÜRE HESAPLAMASI ---
 slider_duration = len(images_b64) * 4 if images_b64 else 15
 
+# 🌟 HTML ENJEKSİYONU: Streamlit döngüsünden bağımsız, mobilde asla titremeyen/kaybolmayan arka plan katmanı
 st.markdown(f"""
+    <div class="fixed-bg-slider"></div>
+    <div class="fixed-bg-overlay"></div>
+    
     <style>
     {bg_css_steps}
     
-    /* SLAYT MOTORU ANA GÖVDEYE BAĞLANDI (MOBİL UYUMLU) */
-    [data-testid="stAppViewContainer"], .stApp, [data-testid="stApp"] {{
+    /* 📱 Sabit Arka Plan Slayt Katmanı (Streamlit'ten tamamen bağımsız çalışır) */
+    .fixed-bg-slider {{
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        z-index: -2;
         background-size: cover !important;
         background-position: center center !important;
         background-repeat: no-repeat !important;
-        /* 📱 Mobil tarayıcı kilitlenmesini çözmek için fixed kaldırıldı: */
-        background-attachment: scroll !important;
         animation: bgSlider {slider_duration}s infinite ease-in-out;
-        position: relative;
+        /* Mobil tarayıcılarda kaydırma kaynaklı yeniden tetiklenmeyi engeller: */
+        will-change: background-image;
+        transform: translate3d(0, 0, 0);
     }}
     
-    /* 🌟 FOTOĞRAFLARI BELİRGİNLEŞTİREN SEFFAFLIK MASKESİ */
-    [data-testid="stAppViewContainer"]::before, .stApp::before {{
-        content: "";
-        position: absolute;
-        top: 0; left: 0; width: 100%; height: 100%;
+    /* 🌟 Fotoğrafların Üzerindeki Seffaflık Maskesi */
+    .fixed-bg-overlay {{
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        z-index: -1;
         background-color: rgba(255, 254, 253, 0.45) !important;
-        z-index: 0;
     }}
     
-    /* 📱 MOBİLDE GÖRÜNTÜYÜ KAPATAN BEYAZ ARKA PLANLARI SIFIRLAMA */
+    /* 📱 Streamlit'in kendi katmanlarındaki tüm beyaz/gri arka planları zorla sıfırlıyoruz */
+    [data-testid="stAppViewContainer"], .stApp, [data-testid="stApp"], 
     [data-testid="stMainBlockContainer"], .main, .block-container, [data-testid="stHeader"] {{
-        position: relative;
-        z-index: 1;
         background: transparent !important;
         background-color: transparent !important;
+        box-shadow: none !important;
+    }}
+    
+    [data-testid="stMainBlockContainer"] {{
+        position: relative;
+        z-index: 1;
         padding-bottom: 140px !important;
         padding-top: 20px !important;
         margin: 0px !important;
     }}
     
-    html, body, .stApp, div[data-testid="stVerticalBlock"] {{
+    html, body, div[data-testid="stVerticalBlock"] {{
         background: transparent !important;
         background-color: transparent !important;
     }}
