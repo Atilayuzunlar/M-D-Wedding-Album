@@ -151,19 +151,38 @@ def compare_biyometric_vectors(vector1, vector2):
     return 1.0 - similarity
 
 # --- CSS ---
-st.markdown(f"""
-    <style>
+<style>
     [data-testid="stAppViewContainer"], .stApp, [data-testid="stApp"], 
     [data-testid="stMainBlockContainer"], .main, .block-container {{
         background: transparent !important;
         background-color: transparent !important;
         box-shadow: none !important;
     }}
+    
     [data-testid="stHeader"], header, footer, [data-testid="stDecoration"] {{
         display: none !important;
         visibility: hidden !important;
         height: 0px !important;
     }}
+    
+    /* 🌟 ORTADAKİ BEYAZ ÇİZGİYİ VE TÜM VARSAYILAN KENARLIKLARI SIFIRLAYAN KISIM */
+    hr, div[data-testid="stForm"] {{
+        border: none !important;
+        background: transparent !important;
+    }}
+    
+    div[data-testid="stVerticalBlock"] > div {{
+        border: none !important;
+        box-shadow: none !important;
+    }}
+    
+    /* Streamlit'in widget'lar arasına koyduğu gri/beyaz yatay çizgileri tamamen yok et */
+    [data-testid="stVerticalBlockBorderWrapper"], .st-emotion-cache-1vt4938, .st-emotion-cache-k3asqq {{
+        border: none !important;
+        border-width: 0px !important;
+        box-shadow: none !important;
+    }}
+    
     [data-testid="stMainBlockContainer"] {{
         position: relative;
         z-index: 10;
@@ -171,10 +190,12 @@ st.markdown(f"""
         padding-bottom: 140px !important;
         margin: 0px !important;
     }}
+    
     html, body, div[data-testid="stVerticalBlock"] {{
         background: transparent !important;
         background-color: transparent !important;
     }}
+    
     div[data-testid="stForm"], .stFileUploader, [data-baseweb="file-uploader"], 
     [data-testid="element-container"], div[data-testid="stBlock"], 
     .element-container, div[data-impl="box"], .stCameraInput, div[data-testid="stCameraInput"] {{ 
@@ -182,13 +203,17 @@ st.markdown(f"""
         background: transparent !important; 
         box-shadow: none !important; 
     }}
+    
     .main-title {{ font-family: 'Playfair Display', serif; color: #D98880 !important; text-align: center; font-size: 2.4rem !important; font-weight: 800 !important; margin-top: 10px; text-shadow: 2px 2px 4px rgba(255,255,255,1), -2px -2px 4px rgba(255,255,255,1); }}
     .top-subtitle {{ text-align: center; color: #D98880 !important; font-size: 1.3rem !important; font-style: italic; margin-bottom: 20px; font-weight: 700; text-shadow: 2px 2px 4px rgba(255,255,255,1), -2px -2px 4px rgba(255,255,255,1); }}
     .card-title {{ color: #D98880 !important; font-weight: 800 !important; text-align: center; font-size: 1.6rem !important; margin-bottom: 20px; }}
     .couple-message {{ font-family: 'Georgia', serif; color: #D98880 !important; text-align: center; font-size: 1.25rem !important; font-style: italic; background-color: rgba(255, 255, 255, 0.98) !important; padding: 22px; border-radius: 15px; border-left: 6px solid #D98880; margin-bottom: 25px; font-weight: 600; line-height: 1.7; }}
+    
     p, span, label, h1, h2, h3, h4, h5, h6, .stText, .stWidgetLabel p {{ color: #D98880 !important; font-size: 1.25rem !important; font-weight: 700 !important; text-shadow: 1px 1px 2px rgba(255,255,255,0.8); }}
     .glass-card {{ background: rgba(255, 255, 255, 0.97) !important; border-radius: 24px; padding: 25px; margin-bottom: 25px; border: 1px solid rgba(210, 190, 190, 0.4); box-shadow: 0 10px 30px rgba(0,0,0,0.04); }}
+    
     [data-testid="stFileUploaderDropzone"] {{ background-color: rgba(255, 255, 255, 0.9) !important; border: 2px dashed #D98880 !important; border-radius: 16px !important; padding: 25px !important; }}
+    
     div.stButton > button {{ 
         background: linear-gradient(135deg, #9B5DE5 0%, #8338EC 100%) !important; 
         border-radius: 14px !important; 
@@ -204,6 +229,7 @@ st.markdown(f"""
         font-weight: 900 !important;
         text-shadow: none !important;
     }}
+    
     .mobile-nav-bar {{ 
         position: fixed; bottom: 0; left: 0; width: 100%; 
         background-color: #FFFFFF !important; border-top: 1px solid #EADCE6; 
@@ -214,12 +240,14 @@ st.markdown(f"""
     .mobile-nav-bar div[data-testid="column"] {{ display: flex !important; justify-content: center !important; align-items: center !important; padding: 0 !important; }}
     .mobile-nav-bar div.stButton > button {{ background: transparent !important; border: none !important; box-shadow: none !important; height: auto !important; padding: 4px 0 !important; margin: 0 !important; display: block !important; text-align: center !important; }}
     .mobile-nav-bar div.stButton > button p, .mobile-nav-bar div.stButton > button span {{ color: #7D4643 !important; font-size: 1.05rem !important; font-weight: 800 !important; }}
+    
     .bg-mask {{
         position: fixed;
         top: 0; left: 0; width: 100vw; height: 100vh;
         background-color: rgba(255, 254, 253, 0.45) !important;
         z-index: -10;
     }}
+    
     .bg-slideshow-img {{
         position: fixed !important;
         top: 0 !important;
@@ -237,7 +265,6 @@ st.markdown(f"""
         box-shadow: 0 4px 12px rgba(0,0,0,0.1) !important;
     }}
     </style>
-""", unsafe_allow_html=True)
 
 if active_bg_b64:
     st.markdown(f'<img src="data:image/jpeg;base64,{active_bg_b64}" class="bg-slideshow-img">', unsafe_allow_html=True)
