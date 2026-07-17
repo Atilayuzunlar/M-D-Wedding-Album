@@ -9,8 +9,9 @@ import time
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 
-# 🌟 GERÇEK YÜZ TANIMA MOTORUNU ENTEGRE EDİYORUZ (MOCK KALDIRILDI)
-import face_recognition
+# 🌟 SAF PYTHON VE DEEPFACE TABANLI YÜZ TANIMA MOTORU
+from deepface import DeepFace
+import cv2
 
 # --- GOOGLE DRIVE YAPILANDIRMASI ---
 DRIVE_FOLDER_ID = "1uoWy7OlEV-7PH7vzoUaGr71ad-Ysq2P-" 
@@ -216,7 +217,7 @@ else:
     if st.session_state.active_page == "home":
         st.markdown('<div class="glass-card" style="text-align: center;">', unsafe_allow_html=True)
         st.markdown('<h3 class="card-title">Bizim Hikayemiz</h3>', unsafe_allow_html=True)
-        st.markdown('<p style="font-style: italic; line-height: 1.8;">"Bir ömür boyu sürecek masalımızın en özel gününe hoş geldiniz. Fotoğraflarınızı paylaşmak ve dijital anı devterimize katkıda bulunmak için alttaki menüyü kullanabilirsiniz."</p>', unsafe_allow_html=True)
+        st.markdown('<p style="font-style: italic; line-height: 1.8;">"Bir ömür boyu sürecek masalımızın en özel gününe hoş geldiniz. Fotoğraflarınızı paylaşmak ve dijital anı defterimize katkıda bulunmak için alttaki menüyü kullanabilirsiniz."</p>', unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
     # 📸 FOTOĞRAF YÜKLEME SAYFASI (UPLOAD)
@@ -269,16 +270,10 @@ else:
                                 fields='id'
                             ).execute()
                             
-                            # 2. AI VERİTABANINA YAZMA (Yüz tanımlama verisiyle birlikte)
-                            # Fotoğraftaki yüz kodlamalarını (encoding) hesaplıyoruz
-                            temp_io = io.BytesIO(file_bytes)
-                            loaded_image = face_recognition.load_image_file(temp_io)
-                            face_encodings = face_recognition.face_encodings(loaded_image)
-                            
+                            # 2. AI VERİTABANINA YAZMA (DeepFace uyumlu ham saklama)
                             new_record = {
                                 "name": file_name,
                                 "bytes": file_bytes,
-                                "encodings": face_encodings, # 🌟 Gerçek yüz kodlamaları
                                 "uploaded_by": st.session_state.user_name,
                                 "timestamp": datetime.datetime.now()
                             }
@@ -305,7 +300,7 @@ else:
             else:
                 st.error("❌ Google Drive bağlantısı şu an kurulamıyor! Lütfen 'token.pickle' dosyasını kontrol edin.")
 
-    # 🔍 YAPAY ZEKA FOTOĞRAP ARAMA MOTORU (FIND ME)
+    # 🔍 YAPAY ZEKA FOTOĞRAP ARAMA MOTORU (FIND ME - DEEPFACE SÜRÜMÜ)
     elif st.session_state.active_page == "find_me":
         st.markdown('<div class="glass-card">', unsafe_allow_html=True)
         st.markdown('<h3 class="card-title">🔍 Yapay Zeka ile Kendini Bul</h3>', unsafe_allow_html=True)
@@ -318,77 +313,81 @@ else:
             drive_service = get_drive_service()
             
             if drive_service is not None:
-                with st.spinner("Drive ile eşitleme yapılıyor ve albüm taranıyor... ⏳"):
+                with st.spinner("Drive ile senkronizasyon yapılıyor ve albüm taranıyor... ⏳"):
                     try:
-                        # 1. 🌟 DRIVE SENKRONİZASYONU (Silinenleri Veritabanından Atıyoruz)
+                        # 1. DRIVE SENKRONİZASYONU (Sadece mevcut dosyaları tut)
                         results = drive_service.files().list(
                             q=f"'{DRIVE_FOLDER_ID}' in parents and trashed = false",
                             fields="files(name)"
                         ).execute()
                         drive_files = results.get('files', [])
-                        # Güncel dosya isimlerini set yapıyoruz
                         drive_file_names = {file['name'] for file in drive_files}
                         
-                        # database.pkl'i güncelle (Drive'da yoksa sil)
                         synced_db = [
                             item for item in st.session_state.db 
                             if isinstance(item, dict) and item.get("name") in drive_file_names
                         ]
                         
-                        # Eğer veritabanı değiştiyse kaydet
                         if len(synced_db) != len(st.session_state.db):
                             st.session_state.db = synced_db
                             save_db(st.session_state.db)
                         
-                        # 2. 🌟 GERÇEK YÜZ TARAMA SÜRECİ
-                        # Giriş yapılan selfienin yüz kodlamasını alıyoruz
-                        selfie_io = io.BytesIO(selfie_bytes)
-                        selfie_image = face_recognition.load_image_file(selfie_io)
-                        selfie_encodings = face_recognition.face_encodings(selfie_image)
+                        # Geçici dosyalara yazarak DeepFace'e yol sunma (Çakışmasız)
+                        temp_selfie_path = f"temp_selfie_{int(time.time())}.jpg"
+                        with open(temp_selfie_path, "wb") as f:
+                            f.write(selfie_bytes)
                         
-                        if len(selfie_encodings) > 0:
-                            target_encoding = selfie_encodings[0]
-                            matched_photos = []
+                        matched_photos = []
+                        
+                        # Veritabanındaki resimleri tara
+                        for idx, item in enumerate(st.session_state.db):
+                            if not isinstance(item, dict) or "bytes" not in item:
+                                continue
                             
-                            # Veritabanındaki güncel fotoğrafları tek tek analiz ediyoruz
-                            for item in st.session_state.db:
-                                if not isinstance(item, dict) or "bytes" not in item:
-                                    continue
-                                    
-                                # Eğer fotoğrafta önceden hesaplanmış yüz kodlaması yoksa şimdi hesaplayıp kaydedelim
-                                if "encodings" not in item or not item["encodings"]:
-                                    img_io = io.BytesIO(item["bytes"])
-                                    loaded_img = face_recognition.load_image_file(img_io)
-                                    item["encodings"] = face_recognition.face_encodings(loaded_img)
-                                    save_db(st.session_state.db)
+                            temp_db_img_path = f"temp_db_{idx}_{int(time.time())}.jpg"
+                            with open(temp_db_img_path, "wb") as f:
+                                f.write(item["bytes"])
+                            
+                            try:
+                                # 🌟 DEEPFACE İLE DOĞRULAMA (VGG-Face modeli hızlı ve isabetlidir)
+                                result = DeepFace.verify(
+                                    img1_path=temp_selfie_path,
+                                    img2_path=temp_db_img_path,
+                                    model_name="VGG-Face",
+                                    distance_metric="cosine",
+                                    enforce_detection=False
+                                )
                                 
-                                # Fotoğraftaki her yüzü kullanıcının yüzüyle karşılaştırıyoruz
-                                for face_enc in item["encodings"]:
-                                    # 0.50 tolerans eşleşme doğruluğunu artırır (düşük sayı = daha seçici/doğru)
-                                    match = face_recognition.compare_faces([face_enc], target_encoding, tolerance=0.50)
-                                    if match[0]:
-                                        matched_photos.append(item["bytes"])
-                                        break  # Bir eşleşme yeterli
-                            
-                            # 3. 🌟 SONUÇLARI GÖSTERME
-                            if matched_photos:
-                                st.success(f"📸 Sizin olduğunuz {len(matched_photos)} anı yakalandı!")
-                                for idx, photo_bytes in enumerate(matched_photos):
-                                    photo_b64 = base64.b64encode(photo_bytes).decode()
-                                    st.markdown(f'<img src="data:image/jpeg;base64,{photo_b64}" class="ai-found-photo">', unsafe_allow_html=True)
+                                # Eşleşme doğrulandıysa listeye ekle
+                                if result.get("verified", False):
+                                    matched_photos.append(item["bytes"])
+                            except Exception as e:
+                                pass # Yüz tespiti yapılamayan görselleri sessizce atla
+                            finally:
+                                # Çöp birikmemesi için geçici dosyayı anında siliyoruz
+                                if os.path.exists(temp_db_img_path):
+                                    os.remove(temp_db_img_path)
                                     
-                                    st.download_button(
-                                        label="📥 Fotoğrafı İndir",
-                                        data=photo_bytes,
-                                        file_name=f"mustafa_dilruba_dugun_{idx+1}.jpg",
-                                        mime="image/jpeg",
-                                        key=f"download_{idx}"
-                                    )
-                                    st.write("---")
-                            else:
-                                st.info("Albümde size ait bir fotoğraf bulunamadı. Başka bir açıyla poz vermeyi deneyebilirsiniz!")
+                        if os.path.exists(temp_selfie_path):
+                            os.remove(temp_selfie_path)
+                            
+                        # 3. SONUÇLARI GÖSTERME
+                        if matched_photos:
+                            st.success(f"📸 Sizin olduğunuz {len(matched_photos)} anı yakalandı!")
+                            for m_idx, photo_bytes in enumerate(matched_photos):
+                                photo_b64 = base64.b64encode(photo_bytes).decode()
+                                st.markdown(f'<img src="data:image/jpeg;base64,{photo_b64}" class="ai-found-photo">', unsafe_allow_html=True)
+                                
+                                st.download_button(
+                                    label="📥 Fotoğrafı İndir",
+                                    data=photo_bytes,
+                                    file_name=f"mustafa_dilruba_dugun_{m_idx+1}.jpg",
+                                    mime="image/jpeg",
+                                    key=f"download_{m_idx}"
+                                )
+                                st.write("---")
                         else:
-                            st.warning("⚠️ Çekilen fotoğrafta net bir yüz algılanamadı. Lütfen daha aydınlık bir ortamda tekrar deneyin.")
+                            st.info("Albümde size ait bir fotoğraf bulunamadı. Başka bir açıyla poz vermeyi deneyebilirsiniz!")
                             
                     except Exception as e:
                         st.error(f"Eşitleme/Tarama hatası: {e}")
