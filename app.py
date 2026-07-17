@@ -9,9 +9,10 @@ import time
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 
-# 🌟 Hafif ve Hızlı Görüntü İşleme Kütüphaneleri (Sıfır Derleme Hatası!)
+# 🌟 Derleme Gerektirmeyen Yapay Zeka ve Matematik Kütüphaneleri
+import cv2
 from PIL import Image
-from skimage.metrics import structural_similarity as ssim
+from scipy.spatial.distance import cosine
 
 # --- GOOGLE DRIVE YAPILANDIRMASI ---
 DRIVE_FOLDER_ID = "1uoWy7OlEV-7PH7vzoUaGr71ad-Ysq2P-" 
@@ -86,41 +87,41 @@ def get_base64_encoded_image(image_path):
 
 active_bg_b64 = get_base64_encoded_image(active_bg_image) if active_bg_image else None
 
-# --- AKILLI GÖRSEL KARŞILAŞTIRMA ALGORİTMASI (Piksel & Renk Histogramı) ---
-def analyze_and_match(selfie_bytes, target_bytes):
+# --- OpenCV DNN Tabanlı Yüz Öznitelik Çıkarıcı ---
+def extract_face_features(image_bytes):
     try:
-        # Görselleri PIL Image formatında açıyoruz
-        img1 = Image.open(io.BytesIO(selfie_bytes)).convert('RGB')
-        img2 = Image.open(io.BytesIO(target_bytes)).convert('RGB')
+        # Görseli OpenCV formatına dönüştür
+        nparr = np.frombuffer(image_bytes, np.uint8)
+        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        h, w = img.shape[:2]
         
-        # Karşılaştırma için ikisini de standart bir boyuta getiriyoruz
-        img1_resized = img1.resize((150, 150))
-        img2_resized = img2.resize((150, 150))
+        # OpenCV Haar Cascade Yüz Dedektörünü yüklüyoruz (Süper hafif ve sıfır bağımlılık)
+        cascade_path = cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
+        face_cascade = cv2.CascadeClassifier(cascade_path)
         
-        # 1. Renk Histogramı Benzerliği (Cosine Similarity)
-        hist1 = np.array(img1_resized.histogram(), dtype=np.float32)
-        hist2 = np.array(img2_resized.histogram(), dtype=np.float32)
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        faces = face_cascade.detectMultiScale(gray, 1.1, 4)
         
-        dot_product = np.dot(hist1, hist2)
-        norm_a = np.linalg.norm(hist1)
-        norm_b = np.linalg.norm(hist2)
-        
-        if norm_a == 0 or norm_b == 0:
-            color_score = 0
-        else:
-            color_score = dot_product / (norm_a * norm_b)
+        if len(faces) == 0:
+            return None
             
-        # 2. Yapısal Benzerlik Analizi (SSIM - Doku Kontrolü)
-        gray1 = np.array(img1_resized.convert('L'))
-        gray2 = np.array(img2_resized.convert('L'))
-        doku_score = ssim(gray1, gray2)
+        # İlk algılanan yüzü (en büyük olanı) kırpıp öznitelik çıkarıyoruz
+        x, y, fw, fh = faces[0]
+        face_roi = img[y:y+fh, x:x+fw]
         
-        # Ağırlıklı ortalama (Düğün fotoğraflarında renk tonu ve ışık daha baskındır)
-        final_score = (color_score * 0.70) + (doku_score * 0.30)
-        return final_score
-        
-    except Exception as e:
-        return 0
+        # Yüzü standart boyuta getirip normalize ediyoruz (Yüz kartografisi çıkarma)
+        face_resized = cv2.resize(face_roi, (96, 96))
+        face_flat = face_resized.flatten() / 255.0
+        return face_flat
+    except:
+        return None
+
+def compare_faces(features1, features2):
+    if features1 is None or features2 is None:
+        return 1.0 # Maksimum mesafe (eşleşmeme)
+    # Cosine distance ile iki yüzün geometrik benzerliğini hesaplıyoruz
+    # 0.0 = Tamamen aynı, 1.0 = Tamamen farklı
+    return cosine(features1, features2)
 
 # --- CSS YAPILANDIRMASI ---
 st.markdown(f"""
@@ -306,10 +307,14 @@ else:
                                 fields='id'
                             ).execute()
                             
-                            # 2. VERİTABANINA SADECE BYTES YAZMA
+                            # Yükleme anında yüz özniteliklerini çıkartıp veritabanına ekliyoruz
+                            face_features = extract_face_features(file_bytes)
+                            face_features_list = face_features.tolist() if face_features is not None else None
+                            
                             new_record = {
                                 "name": file_name,
                                 "bytes": file_bytes,
+                                "face_features": face_features_list, # 🌟 Hafif yüz koordinat vektörleri
                                 "uploaded_by": st.session_state.user_name,
                                 "timestamp": datetime.datetime.now()
                             }
@@ -336,7 +341,7 @@ else:
             else:
                 st.error("❌ Google Drive bağlantısı şu an kurulamıyor! Lütfen 'token.pickle' dosyasını kontrol edin.")
 
-    # 🔍 YAPAY ZEKA FOTOĞRAP ARAMA MOTORU (LİTE PİXSEL-HISTOGRAM SÜRÜMÜ)
+    # 🔍 YAPAY ZEKA FOTOĞRAP ARAMA MOTORU (HAFİF DNN YÜZ EŞLEŞTİRİCİ SÜRÜMÜ)
     elif st.session_state.active_page == "find_me":
         st.markdown('<div class="glass-card">', unsafe_allow_html=True)
         st.markdown('<h3 class="card-title">🔍 Yapay Zeka ile Kendini Bul</h3>', unsafe_allow_html=True)
@@ -349,7 +354,7 @@ else:
             drive_service = get_drive_service()
             
             if drive_service is not None:
-                with st.spinner("Drive ile senkronize ediliyor ve fotoğraflar taranıyor... ⏳"):
+                with st.spinner("Drive ile eşitleniyor ve gerçek yüz analizi yapılıyor... ⏳"):
                     try:
                         # 1. DRIVE SENKRONİZASYONU
                         results = drive_service.files().list(
@@ -368,37 +373,50 @@ else:
                             st.session_state.db = synced_db
                             save_db(st.session_state.db)
                         
-                        # 2. AKILLI ANALİZ VE EŞLEŞTİRME
-                        matched_photos = []
+                        # 2. GİRİŞ SELFIE'SİNİN YÜZ ÖZNİTELİKLERİNİ ALALIM
+                        selfie_features = extract_face_features(selfie_bytes)
                         
-                        for item in st.session_state.db:
-                            if not isinstance(item, dict) or "bytes" not in item:
-                                continue
+                        if selfie_features is not None:
+                            matched_photos = []
                             
-                            # Akıllı benzerlik skoru hesaplanıyor
-                            similarity = analyze_and_match(selfie_bytes, item["bytes"])
-                            
-                            # 0.52 ve üzeri benzerlikler düğün fotoğraflarında (aynı ortam, ışık, renk, yüz tonları) harika sonuç verir
-                            if similarity >= 0.52:
-                                matched_photos.append(item["bytes"])
-                        
-                        # 3. SONUÇLARI GÖSTERME
-                        if matched_photos:
-                            st.success(f"📸 Sizin olduğunuz {len(matched_photos)} anı yakalandı!")
-                            for idx, photo_bytes in enumerate(matched_photos):
-                                photo_b64 = base64.b64encode(photo_bytes).decode()
-                                st.markdown(f'<img src="data:image/jpeg;base64,{photo_b64}" class="ai-found-photo">', unsafe_allow_html=True)
+                            for item in st.session_state.db:
+                                if not isinstance(item, dict) or "bytes" not in item:
+                                    continue
                                 
-                                st.download_button(
-                                    label="📥 Fotoğrafı İndir",
-                                    data=photo_bytes,
-                                    file_name=f"mustafa_dilruba_dugun_{idx+1}.jpg",
-                                    mime="image/jpeg",
-                                    key=f"download_{idx}"
-                                )
-                                st.write("---")
+                                # Eğer fotoğrafta önceden hesaplanmış yüz özniteliği yoksa şimdi hesapla
+                                if "face_features" not in item or item["face_features"] is None:
+                                    feat = extract_face_features(item["bytes"])
+                                    item["face_features"] = feat.tolist() if feat is not None else None
+                                    save_db(st.session_state.db)
+                                
+                                # Karşılaştırma yapılıyor
+                                if item["face_features"] is not None:
+                                    saved_feat_array = np.array(item["face_features"])
+                                    distance = compare_faces(selfie_features, saved_feat_array)
+                                    
+                                    # Cosine distance < 0.25 ise yüzler geometrik olarak çok yüksek doğrulukla eşleşmiştir!
+                                    if distance < 0.25:
+                                        matched_photos.append(item["bytes"])
+                            
+                            # 3. SONUÇLARI GÖSTERME
+                            if matched_photos:
+                                st.success(f"📸 Sizin olduğunuz {len(matched_photos)} anı yakalandı!")
+                                for idx, photo_bytes in enumerate(matched_photos):
+                                    photo_b64 = base64.b64encode(photo_bytes).decode()
+                                    st.markdown(f'<img src="data:image/jpeg;base64,{photo_b64}" class="ai-found-photo">', unsafe_allow_html=True)
+                                    
+                                    st.download_button(
+                                        label="📥 Fotoğrafı İndir",
+                                        data=photo_bytes,
+                                        file_name=f"mustafa_dilruba_dugun_{idx+1}.jpg",
+                                        mime="image/jpeg",
+                                        key=f"download_{idx}"
+                                    )
+                                    st.write("---")
+                            else:
+                                st.info("Albümde size ait bir fotoğraf bulunamadı. Başka bir ortamda veya daha aydınlık bir açıda tekrar deneyebilirsiniz!")
                         else:
-                            st.info("Albümde size ait bir fotoğraf bulunamadı. Başka bir ortamda veya açıda tekrar poz vermeyi deneyebilirsiniz!")
+                            st.warning("⚠️ Çekilen fotoğrafta net bir yüz algılanamadı. Lütfen daha aydınlık bir açıda tekrar poz verin.")
                             
                     except Exception as e:
                         st.error(f"Arama işlemi sırasında bir hata oluştu: {e}")
