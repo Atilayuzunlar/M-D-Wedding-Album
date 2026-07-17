@@ -83,32 +83,35 @@ if images_b64:
         bg_css_steps += f"  {start}%, {mid}% {{ background-image: url('data:image/jpeg;base64,{b64}'); }}\n"
     bg_css_steps += "}"
 
+# --- CSS İÇİN SÜRE HESAPLAMASI (Python tarafında önceden yapılıyor) ---
+slider_duration = len(images_b64) * 4 if images_b64 else 15
+
 st.markdown(f"""
-<style>
+    <style>
     {bg_css_steps}
     
     /* SLAYT MOTORU ANA GÖVDEYE BAĞLANDI (MOBİL UYUMLU) */
-    [data-testid="stAppViewContainer"], .stApp, [data-testid="stApp"] {
+    [data-testid="stAppViewContainer"], .stApp, [data-testid="stApp"] {{
         background-size: cover !important;
         background-position: center center !important;
         background-repeat: no-repeat !important;
         /* 📱 Mobil tarayıcı kilitlenmesini çözmek için fixed kaldırıldı: */
         background-attachment: scroll !important;
-        animation: bgSlider {len(images_b64) * 4 if images_b64 else 15}s infinite ease-in-out;
+        animation: bgSlider {slider_duration}s infinite ease-in-out;
         position: relative;
-    }
+    }}
     
     /* 🌟 FOTOĞRAFLARI BELİRGİNLEŞTİREN SEFFAFLIK MASKESİ */
-    [data-testid="stAppViewContainer"]::before, .stApp::before {
+    [data-testid="stAppViewContainer"]::before, .stApp::before {{
         content: "";
         position: absolute;
         top: 0; left: 0; width: 100%; height: 100%;
         background-color: rgba(255, 254, 253, 0.45) !important;
         z-index: 0;
-    }
+    }}
     
     /* 📱 MOBİLDE GÖRÜNTÜYÜ KAPATAN BEYAZ ARKA PLANLARI SIFIRLAMA */
-    [data-testid="stMainBlockContainer"], .main, .block-container, [data-testid="stHeader"] {
+    [data-testid="stMainBlockContainer"], .main, .block-container, [data-testid="stHeader"] {{
         position: relative;
         z-index: 1;
         background: transparent !important;
@@ -116,39 +119,39 @@ st.markdown(f"""
         padding-bottom: 140px !important;
         padding-top: 20px !important;
         margin: 0px !important;
-    }
+    }}
     
-    html, body, .stApp, div[data-testid="stVerticalBlock"] {
+    html, body, .stApp, div[data-testid="stVerticalBlock"] {{
         background: transparent !important;
         background-color: transparent !important;
-    }
+    }}
     
-    footer, header, [data-testid="stHeader"], [data-testid="stDecoration"] {
+    footer, header, [data-testid="stHeader"], [data-testid="stDecoration"] {{
         display: none !important;
         visibility: hidden !important;
-    }
+    }}
     
     div[data-testid="stForm"], .stFileUploader, [data-baseweb="file-uploader"], 
     [data-testid="element-container"], div[data-testid="stBlock"], 
-    .element-container, div[data-impl="box"], .stCameraInput, div[data-testid="stCameraInput"] { 
+    .element-container, div[data-impl="box"], .stCameraInput, div[data-testid="stCameraInput"] {{ 
         border: none !important; 
         background: transparent !important; 
         box-shadow: none !important; 
-    }
+    }}
     
     /* 🔴 OKUNAKLI PASTEL KIRMIZI METİNLER VE ARKA PLAN GÖLGELERİ */
-    .main-title { font-family: 'Playfair Display', serif; color: #D98880 !important; text-align: center; font-size: 2.4rem !important; font-weight: 800 !important; margin-top: 20px; text-shadow: 2px 2px 4px rgba(255,255,255,1), -2px -2px 4px rgba(255,255,255,1); }
-    .top-subtitle { text-align: center; color: #D98880 !important; font-size: 1.3rem !important; font-style: italic; margin-bottom: 30px; font-weight: 700; text-shadow: 2px 2px 4px rgba(255,255,255,1), -2px -2px 4px rgba(255,255,255,1); }
-    .card-title { color: #D98880 !important; font-weight: 800 !important; text-align: center; font-size: 1.6rem !important; margin-bottom: 20px; }
-    .couple-message { font-family: 'Georgia', serif; color: #D98880 !important; text-align: center; font-size: 1.25rem !important; font-style: italic; background-color: rgba(255, 255, 255, 0.98) !important; padding: 22px; border-radius: 15px; border-left: 6px solid #D98880; margin-bottom: 25px; font-weight: 600; line-height: 1.7; }
+    .main-title {{ font-family: 'Playfair Display', serif; color: #D98880 !important; text-align: center; font-size: 2.4rem !important; font-weight: 800 !important; margin-top: 20px; text-shadow: 2px 2px 4px rgba(255,255,255,1), -2px -2px 4px rgba(255,255,255,1); }}
+    .top-subtitle {{ text-align: center; color: #D98880 !important; font-size: 1.3rem !important; font-style: italic; margin-bottom: 30px; font-weight: 700; text-shadow: 2px 2px 4px rgba(255,255,255,1), -2px -2px 4px rgba(255,255,255,1); }}
+    .card-title {{ color: #D98880 !important; font-weight: 800 !important; text-align: center; font-size: 1.6rem !important; margin-bottom: 20px; }}
+    .couple-message {{ font-family: 'Georgia', serif; color: #D98880 !important; text-align: center; font-size: 1.25rem !important; font-style: italic; background-color: rgba(255, 255, 255, 0.98) !important; padding: 22px; border-radius: 15px; border-left: 6px solid #D98880; margin-bottom: 25px; font-weight: 600; line-height: 1.7; }}
     
-    p, span, label, h1, h2, h3, h4, h5, h6, .stText, .stWidgetLabel p { color: #D98880 !important; font-size: 1.25rem !important; font-weight: 700 !important; text-shadow: 1px 1px 2px rgba(255,255,255,0.8); }
-    .glass-card { background: rgba(255, 255, 255, 0.97) !important; border-radius: 24px; padding: 25px; margin-bottom: 25px; border: 1px solid rgba(210, 190, 190, 0.4); box-shadow: 0 10px 30px rgba(0,0,0,0.04); }
+    p, span, label, h1, h2, h3, h4, h5, h6, .stText, .stWidgetLabel p {{ color: #D98880 !important; font-size: 1.25rem !important; font-weight: 700 !important; text-shadow: 1px 1px 2px rgba(255,255,255,0.8); }}
+    .glass-card {{ background: rgba(255, 255, 255, 0.97) !important; border-radius: 24px; padding: 25px; margin-bottom: 25px; border: 1px solid rgba(210, 190, 190, 0.4); box-shadow: 0 10px 30px rgba(0,0,0,0.04); }}
     
-    [data-testid="stFileUploaderDropzone"] { background-color: rgba(255, 255, 255, 0.9) !important; border: 2px dashed #D98880 !important; border-radius: 16px !important; padding: 25px !important; }
+    [data-testid="stFileUploaderDropzone"] {{ background-color: rgba(255, 255, 255, 0.9) !important; border: 2px dashed #D98880 !important; border-radius: 16px !important; padding: 25px !important; }}
     
     /* SAF BEYAZ METİNLİ MOR BUTONLAR */
-    div.stButton > button { 
+    div.stButton > button {{ 
         background: linear-gradient(135deg, #9B5DE5 0%, #8338EC 100%) !important; 
         border-radius: 14px !important; 
         border: none !important; 
@@ -156,27 +159,27 @@ st.markdown(f"""
         width: 100% !important; 
         box-shadow: 0 5px 15px rgba(131, 56, 236, 0.3) !important; 
         margin-top: 10px;
-    }
-    div.stButton > button p, div.stButton > button span, div.stButton > button div {
+    }}
+    div.stButton > button p, div.stButton > button span, div.stButton > button div {{
         color: #FFFFFF !important;
         font-size: 1.2rem !important;
         font-weight: 900 !important;
         text-shadow: none !important;
-    }
+    }}
     
     /* MOBİL NAVİGASYON BARI */
-    .mobile-nav-bar { 
+    .mobile-nav-bar {{ 
         position: fixed; bottom: 0; left: 0; width: 100%; 
         background-color: #FFFFFF !important; border-top: 1px solid #EADCE6; 
         display: flex; justify-content: space-around; align-items: center; 
         padding: 14px 0 !important; z-index: 999999 !important; 
         box-shadow: 0px -5px 25px rgba(0,0,0,0.08);
-    }
-    .mobile-nav-bar div[data-testid="column"] { display: flex !important; justify-content: center !important; align-items: center !important; padding: 0 !important; }
-    .mobile-nav-bar div.stButton > button { background: transparent !important; border: none !important; box-shadow: none !important; height: auto !important; padding: 4px 0 !important; margin: 0 !important; display: block !important; text-align: center !important; }
-    .mobile-nav-bar div.stButton > button p, .mobile-nav-bar div.stButton > button span { color: #7D4643 !important; font-size: 1.05rem !important; font-weight: 800 !important; }
+    }}
+    .mobile-nav-bar div[data-testid="column"] {{ display: flex !important; justify-content: center !important; align-items: center !important; padding: 0 !important; }}
+    .mobile-nav-bar div.stButton > button {{ background: transparent !important; border: none !important; box-shadow: none !important; height: auto !important; padding: 4px 0 !important; margin: 0 !important; display: block !important; text-align: center !important; }}
+    .mobile-nav-bar div.stButton > button p, .mobile-nav-bar div.stButton > button span {{ color: #7D4643 !important; font-size: 1.05rem !important; font-weight: 800 !important; }}
     </style>
-    """, unsafe_allow_html=True)
+""", unsafe_allow_html=True)
 
 # --- 1. ADIM: GİRİŞ EKRANI ---
 if st.session_state.user_name == "":
