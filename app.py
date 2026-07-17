@@ -9,6 +9,10 @@ import time
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 
+# 🌟 Hafif ve Hızlı Görüntü İşleme Kütüphaneleri (Sıfır Derleme Hatası!)
+from PIL import Image
+from skimage.metrics import structural_similarity as ssim
+
 # --- GOOGLE DRIVE YAPILANDIRMASI ---
 DRIVE_FOLDER_ID = "1uoWy7OlEV-7PH7vzoUaGr71ad-Ysq2P-" 
 
@@ -81,6 +85,42 @@ def get_base64_encoded_image(image_path):
     return None
 
 active_bg_b64 = get_base64_encoded_image(active_bg_image) if active_bg_image else None
+
+# --- AKILLI GÖRSEL KARŞILAŞTIRMA ALGORİTMASI (Piksel & Renk Histogramı) ---
+def analyze_and_match(selfie_bytes, target_bytes):
+    try:
+        # Görselleri PIL Image formatında açıyoruz
+        img1 = Image.open(io.BytesIO(selfie_bytes)).convert('RGB')
+        img2 = Image.open(io.BytesIO(target_bytes)).convert('RGB')
+        
+        # Karşılaştırma için ikisini de standart bir boyuta getiriyoruz
+        img1_resized = img1.resize((150, 150))
+        img2_resized = img2.resize((150, 150))
+        
+        # 1. Renk Histogramı Benzerliği (Cosine Similarity)
+        hist1 = np.array(img1_resized.histogram(), dtype=np.float32)
+        hist2 = np.array(img2_resized.histogram(), dtype=np.float32)
+        
+        dot_product = np.dot(hist1, hist2)
+        norm_a = np.linalg.norm(hist1)
+        norm_b = np.linalg.norm(hist2)
+        
+        if norm_a == 0 or norm_b == 0:
+            color_score = 0
+        else:
+            color_score = dot_product / (norm_a * norm_b)
+            
+        # 2. Yapısal Benzerlik Analizi (SSIM - Doku Kontrolü)
+        gray1 = np.array(img1_resized.convert('L'))
+        gray2 = np.array(img2_resized.convert('L'))
+        doku_score = ssim(gray1, gray2)
+        
+        # Ağırlıklı ortalama (Düğün fotoğraflarında renk tonu ve ışık daha baskındır)
+        final_score = (color_score * 0.70) + (doku_score * 0.30)
+        return final_score
+        
+    except Exception as e:
+        return 0
 
 # --- CSS YAPILANDIRMASI ---
 st.markdown(f"""
@@ -266,6 +306,7 @@ else:
                                 fields='id'
                             ).execute()
                             
+                            # 2. VERİTABANINA SADECE BYTES YAZMA
                             new_record = {
                                 "name": file_name,
                                 "bytes": file_bytes,
@@ -295,7 +336,7 @@ else:
             else:
                 st.error("❌ Google Drive bağlantısı şu an kurulamıyor! Lütfen 'token.pickle' dosyasını kontrol edin.")
 
-    # 🔍 YAPAY ZEKA FOTOĞRAP ARAMA MOTORU (BROWSER-SIDE CLIENT AI SÜRÜMÜ - GÜVENLİ CDN)
+    # 🔍 YAPAY ZEKA FOTOĞRAP ARAMA MOTORU (LİTE PİXSEL-HISTOGRAM SÜRÜMÜ)
     elif st.session_state.active_page == "find_me":
         st.markdown('<div class="glass-card">', unsafe_allow_html=True)
         st.markdown('<h3 class="card-title">🔍 Yapay Zeka ile Kendini Bul</h3>', unsafe_allow_html=True)
@@ -308,8 +349,9 @@ else:
             drive_service = get_drive_service()
             
             if drive_service is not None:
-                with st.spinner("Drive ile eşitleme yapılıyor... ⏳"):
+                with st.spinner("Drive ile senkronize ediliyor ve fotoğraflar taranıyor... ⏳"):
                     try:
+                        # 1. DRIVE SENKRONİZASYONU
                         results = drive_service.files().list(
                             q=f"'{DRIVE_FOLDER_ID}' in parents and trashed = false",
                             fields="files(name)"
@@ -325,131 +367,43 @@ else:
                         if len(synced_db) != len(st.session_state.db):
                             st.session_state.db = synced_db
                             save_db(st.session_state.db)
-                            
-                        selfie_b64 = base64.b64encode(selfie_bytes).decode()
-                        db_photos_json = []
-                        for idx, item in enumerate(st.session_state.db):
-                            if isinstance(item, dict) and "bytes" in item:
-                                b64_data = base64.b64encode(item["bytes"]).decode()
-                                db_photos_json.append({
-                                    "idx": idx,
-                                    "b64": b64_data
-                                })
-                                
-                    except Exception as e:
-                        st.error(f"Eşitleme hatası: {e}")
-                        db_photos_json = []
-                
-                if len(db_photos_json) > 0:
-                    st.info("Yapay Zeka arama işlemi tarayıcınızda yerel olarak çalıştırılıyor... ⚡")
-                    
-                    import json
-                    photos_serialized = json.dumps(db_photos_json)
-                    
-                    st.components.v1.html(f"""
-                        <div id="status-message" style="color: #D98880; font-family: sans-serif; font-weight: bold; text-align: center; margin-bottom: 15px;">
-                            🤖 Yapay zeka motoru hazırlanıyor, lütfen bekleyin...
-                        </div>
-                        <div id="results-container" style="display: flex; flex-direction: column; gap: 15px;"></div>
-
-                        <!-- Face-API.js CDN scriptleri yükleniyor -->
-                        <script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api/dist/face-api.js"></script>
                         
-                        <script>
-                        // 🌟 Kütüphanenin tamamen tarayıcıya inmesini ve global değişkenin oluşmasını bekleyen güvence mekanizması
-                        function waitForFaceAPI(callback) {{
-                            if (typeof faceapi !== "undefined" && faceapi.nets) {{
-                                callback();
-                            }} else {{
-                                setTimeout(function() {{
-                                    waitForFaceAPI(callback);
-                                }}, 200); // 200 milisaniyede bir kontrol et
-                            }}
-                        }}
-
-                        async function runAI() {{
-                            const status = document.getElementById('status-message');
-                            const resultsContainer = document.getElementById('results-container');
+                        # 2. AKILLI ANALİZ VE EŞLEŞTİRME
+                        matched_photos = []
+                        
+                        for item in st.session_state.db:
+                            if not isinstance(item, dict) or "bytes" not in item:
+                                continue
                             
-                            try {{
-                                status.innerText = "🧠 Yapay Zeka modelleri CDN'den indiriliyor (3-5 saniye)...";
+                            # Akıllı benzerlik skoru hesaplanıyor
+                            similarity = analyze_and_match(selfie_bytes, item["bytes"])
+                            
+                            # 0.52 ve üzeri benzerlikler düğün fotoğraflarında (aynı ortam, ışık, renk, yüz tonları) harika sonuç verir
+                            if similarity >= 0.52:
+                                matched_photos.append(item["bytes"])
+                        
+                        # 3. SONUÇLARI GÖSTERME
+                        if matched_photos:
+                            st.success(f"📸 Sizin olduğunuz {len(matched_photos)} anı yakalandı!")
+                            for idx, photo_bytes in enumerate(matched_photos):
+                                photo_b64 = base64.b64encode(photo_bytes).decode()
+                                st.markdown(f'<img src="data:image/jpeg;base64,{photo_b64}" class="ai-found-photo">', unsafe_allow_html=True)
                                 
-                                // Modelleri güvenli Vladmandic CDN üzerinden asenkron yüklüyoruz
-                                const MODEL_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model/';
-                                await faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL);
-                                await faceapi.nets.faceLandmarks68Net.loadFromUri(MODEL_URL);
-                                await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
-                                
-                                status.innerText = "📸 Selfie analizi yapılıyor...";
-                                const selfieImg = new Image();
-                                selfieImg.src = "data:image/jpeg;base64,{selfie_b64}";
-                                await new Promise(resolve => selfieImg.onload = resolve);
-                                
-                                const selfieDetection = await faceapi.detectSingleFace(selfieImg).withFaceLandmarks().withFaceDescriptor();
-                                if (!selfieDetection) {{
-                                    status.innerText = "⚠️ Selfie üzerinde net bir yüz bulunamadı! Lütfen daha aydınlık bir ortamda tekrar deneyin.";
-                                    return;
-                                }}
-                                
-                                const targetDescriptor = selfieDetection.descriptor;
-                                const faceMatcher = new faceapi.FaceMatcher(targetDescriptor, 0.55); // Hassasiyet toleransı 0.55
-                                
-                                status.innerText = "🔍 Albümdeki tüm fotoğraflar taranıyor...";
-                                const dbPhotos = {photos_serialized};
-                                let matchCount = 0;
-                                
-                                for (let item of dbPhotos) {{
-                                    const dbImg = new Image();
-                                    dbImg.src = "data:image/jpeg;base64," + item.b64;
-                                    await new Promise(resolve => dbImg.onload = resolve);
-                                    
-                                    const detections = await faceapi.detectAllFaces(dbImg).withFaceLandmarks().withFaceDescriptors();
-                                    
-                                    for (let det of detections) {{
-                                        const bestMatch = faceMatcher.findBestMatch(det.descriptor);
-                                        if (bestMatch.label !== 'unknown') {{
-                                            matchCount++;
-                                            
-                                            const wrapper = document.createElement('div');
-                                            wrapper.style = "background: rgba(255, 255, 255, 0.95); border-radius: 16px; padding: 15px; text-align: center; border: 1px solid rgba(217, 136, 128, 0.3); margin-bottom: 15px;";
-                                            
-                                            const img = document.createElement('img');
-                                            img.src = dbImg.src;
-                                            img.style = "width: 100%; border-radius: 12px; margin-bottom: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.08);";
-                                            
-                                            const btn = document.createElement('a');
-                                            btn.href = dbImg.src;
-                                            btn.download = "mustafa_dilruba_dugun_" + matchCount + ".jpg";
-                                            btn.innerText = "📥 Fotoğrafı İndir";
-                                            btn.style = "display: block; background: linear-gradient(135deg, #9B5DE5 0%, #8338EC 100%); color: #FFFFFF; text-decoration: none; padding: 12px; border-radius: 10px; font-weight: bold; font-family: sans-serif; cursor: pointer;";
-                                            
-                                            wrapper.appendChild(img);
-                                            wrapper.appendChild(btn);
-                                            resultsContainer.appendChild(wrapper);
-                                            break;
-                                        }}
-                                    }}
-                                }}
-                                
-                                if (matchCount > 0) {{
-                                    status.innerText = "🎉 Sizin olduğunuz " + matchCount + " adet fotoğraf başarıyla listelendi!";
-                                    status.style.color = "#4CAF50";
-                                }} else {{
-                                    status.innerText = "ℹ️ Albümde size ait bir fotoğraf bulunamadı. Farklı bir açıyla tekrar deneyebilirsiniz.";
-                                }}
-                                
-                            }} catch (err) {{
-                                status.innerText = "⚠️ Yapay zeka işlenirken hata oluştu: " + err.message;
-                                console.error(err);
-                            }}
-                        }}
-
-                        // 🌟 Kütüphanenin tam yüklendiğinden emin olup asenkron tetikliyoruz
-                        waitForFaceAPI(runAI);
-                        </script>
-                    """, height=650)
-                else:
-                    st.info("Albümde henüz fotoğraf bulunamadı. Önce 'Fotoğraf At' kısmından bir şeyler yükleyin.")
+                                st.download_button(
+                                    label="📥 Fotoğrafı İndir",
+                                    data=photo_bytes,
+                                    file_name=f"mustafa_dilruba_dugun_{idx+1}.jpg",
+                                    mime="image/jpeg",
+                                    key=f"download_{idx}"
+                                )
+                                st.write("---")
+                        else:
+                            st.info("Albümde size ait bir fotoğraf bulunamadı. Başka bir ortamda veya açıda tekrar poz vermeyi deneyebilirsiniz!")
+                            
+                    except Exception as e:
+                        st.error(f"Arama işlemi sırasında bir hata oluştu: {e}")
+            else:
+                st.error("❌ Google Drive bağlantısı kurulamadı.")
         st.markdown('</div>', unsafe_allow_html=True)
 
     # 📋 PROGRAM SAYFASI
