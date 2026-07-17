@@ -42,7 +42,7 @@ def get_drive_service():
     if not creds or not creds.valid:
         # Eğer token geçersizse ama yenilenebiliyorsa (refresh token varsa) arkada sessizce yeniler
         from google.auth.transport.requests import Request
-        if creds Harold and creds.expired and creds.refresh_token:
+        if creds and creds.expired and creds.refresh_token:
             try:
                 creds.refresh(Request())
                 with open(TOKEN_FILE, 'wb') as token:
