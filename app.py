@@ -9,16 +9,8 @@ import time
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 
-# ==========================================
-# 🛑 WINDOWS KİLİTLENME BAYPASI (MOCK ENGINE)
-# ==========================================
-class MockFaceRecognition:
-    def load_image_file(self, file_obj): return "image_data"
-    def face_encodings(self, image): return [np.random.rand(128)]
-    def compare_faces(self, known_encodings, unknown_encoding, tolerance=0.55): return [True]
-
-face_recognition = MockFaceRecognition()
-# ==========================================
+# 🌟 GERÇEK YÜZ TANIMA MOTORUNU ENTEGRE EDİYORUZ (MOCK KALDIRILDI)
+import face_recognition
 
 # --- GOOGLE DRIVE YAPILANDIRMASI ---
 DRIVE_FOLDER_ID = "1uoWy7OlEV-7PH7vzoUaGr71ad-Ysq2P-" 
@@ -70,7 +62,6 @@ if "user_name" not in st.session_state: st.session_state.user_name = ""
 if "active_page" not in st.session_state: st.session_state.active_page = "home"
 if "upload_method" not in st.session_state: st.session_state.upload_method = "camera"
 if "bg_index" not in st.session_state: st.session_state.bg_index = 1
-# 🌟 Kopyalama / önbellek kilitlenmesini çözmek için dinamik form anahtarı:
 if "uploader_key" not in st.session_state: st.session_state.uploader_key = str(int(time.time()))
 
 # --- FOTOĞRAFLARIN VARLIĞINI KONTROL ETME ---
@@ -92,13 +83,11 @@ def get_base64_encoded_image(image_path):
         with open(image_path, "rb") as img_file: return base64.b64encode(img_file.read()).decode()
     return None
 
-# Arka plan slaytı için Base64 kodlaması
 active_bg_b64 = get_base64_encoded_image(active_bg_image) if active_bg_image else None
 
 # --- CSS YAPILANDIRMASI ---
 st.markdown(f"""
     <style>
-    /* 📱 Streamlit'in tüm mobil katmanlarındaki beyaz/gri arka planları tamamen transparan yapıyoruz */
     [data-testid="stAppViewContainer"], .stApp, [data-testid="stApp"], 
     [data-testid="stMainBlockContainer"], .main, .block-container {{
         background: transparent !important;
@@ -106,14 +95,12 @@ st.markdown(f"""
         box-shadow: none !important;
     }}
     
-    /* 🚫 Üstteki o beyaz boş barı ve header alanını tamamen yok ediyoruz */
     [data-testid="stHeader"], header, footer, [data-testid="stDecoration"] {{
         display: none !important;
         visibility: hidden !important;
         height: 0px !important;
     }}
     
-    /* 📱 Tepe boşluklarını sıfırlayarak beyaz barın yerini tamamen kapatıyoruz */
     [data-testid="stMainBlockContainer"] {{
         position: relative;
         z-index: 10;
@@ -135,7 +122,6 @@ st.markdown(f"""
         box-shadow: none !important; 
     }}
     
-    /* 🔴 OKUNAKLI PASTEL KIRMIZI METİNLER VE ARKA PLAN GÖLGELERİ */
     .main-title {{ font-family: 'Playfair Display', serif; color: #D98880 !important; text-align: center; font-size: 2.4rem !important; font-weight: 800 !important; margin-top: 10px; text-shadow: 2px 2px 4px rgba(255,255,255,1), -2px -2px 4px rgba(255,255,255,1); }}
     .top-subtitle {{ text-align: center; color: #D98880 !important; font-size: 1.3rem !important; font-style: italic; margin-bottom: 20px; font-weight: 700; text-shadow: 2px 2px 4px rgba(255,255,255,1), -2px -2px 4px rgba(255,255,255,1); }}
     .card-title {{ color: #D98880 !important; font-weight: 800 !important; text-align: center; font-size: 1.6rem !important; margin-bottom: 20px; }}
@@ -146,7 +132,6 @@ st.markdown(f"""
     
     [data-testid="stFileUploaderDropzone"] {{ background-color: rgba(255, 255, 255, 0.9) !important; border: 2px dashed #D98880 !important; border-radius: 16px !important; padding: 25px !important; }}
     
-    /* SAF BEYAZ METİNLİ MOR BUTONLAR */
     div.stButton > button {{ 
         background: linear-gradient(135deg, #9B5DE5 0%, #8338EC 100%) !important; 
         border-radius: 14px !important; 
@@ -163,7 +148,6 @@ st.markdown(f"""
         text-shadow: none !important;
     }}
     
-    /* MOBİL NAVİGASYON BARI */
     .mobile-nav-bar {{ 
         position: fixed; bottom: 0; left: 0; width: 100%; 
         background-color: #FFFFFF !important; border-top: 1px solid #EADCE6; 
@@ -175,7 +159,6 @@ st.markdown(f"""
     .mobile-nav-bar div.stButton > button {{ background: transparent !important; border: none !important; box-shadow: none !important; height: auto !important; padding: 4px 0 !important; margin: 0 !important; display: block !important; text-align: center !important; }}
     .mobile-nav-bar div.stButton > button p, .mobile-nav-bar div.stButton > button span {{ color: #7D4643 !important; font-size: 1.05rem !important; font-weight: 800 !important; }}
     
-    /* 📱 Görselin altına binen sabit yarı saydam maske */
     .bg-mask {{
         position: fixed;
         top: 0; left: 0; width: 100vw; height: 100vh;
@@ -183,7 +166,6 @@ st.markdown(f"""
         z-index: -10;
     }}
     
-    /* 🌟 FOTOĞRAFI EKRANIN EN ARKASINA ÇİVİLEYEN ÖZEL SLAYTSHOW SINIFI */
     .bg-slideshow-img {{
         position: fixed !important;
         top: 0 !important;
@@ -195,7 +177,6 @@ st.markdown(f"""
         pointer-events: none !important;
     }}
 
-    /* 📸 Yapay Zeka Bulunan Fotoğraf Görünüm Sınıfı */
     .ai-found-photo {{
         width: 100% !important;
         border-radius: 16px !important;
@@ -205,7 +186,6 @@ st.markdown(f"""
     </style>
 """, unsafe_allow_html=True)
 
-# 🌟 ARKA PLAN SLAYTI
 if active_bg_b64:
     st.markdown(f'<img src="data:image/jpeg;base64,{active_bg_b64}" class="bg-slideshow-img">', unsafe_allow_html=True)
     st.markdown('<div class="bg-mask"></div>', unsafe_allow_html=True)
@@ -236,17 +216,15 @@ else:
     if st.session_state.active_page == "home":
         st.markdown('<div class="glass-card" style="text-align: center;">', unsafe_allow_html=True)
         st.markdown('<h3 class="card-title">Bizim Hikayemiz</h3>', unsafe_allow_html=True)
-        st.markdown('<p style="font-style: italic; line-height: 1.8;">"Bir ömür boyu sürecek masalımızın en özel gününe hoş geldiniz. Fotoğraflarınızı paylaşmak ve dijital anı defterimize katkıda bulunmak için alttaki menüyü kullanabilirsiniz."</p>', unsafe_allow_html=True)
+        st.markdown('<p style="font-style: italic; line-height: 1.8;">"Bir ömür boyu sürecek masalımızın en özel gününe hoş geldiniz. Fotoğraflarınızı paylaşmak ve dijital anı devterimize katkıda bulunmak için alttaki menüyü kullanabilirsiniz."</p>', unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
     # 📸 FOTOĞRAF YÜKLEME SAYFASI (UPLOAD)
     elif st.session_state.active_page == "upload":
         st.markdown("### 📸 Mustafa & Dilruba İçin Bir Anı Bırakın")
         
-        # 🌟 Kameradan tekil anlık çekim
         uploaded_file = st.camera_input("Fotoğrafınızı Çekin", key=f"cam_{st.session_state.uploader_key}")
         
-        # 🌟 Galeriden ÇOKLU (accept_multiple_files=True) dosya yükleyici
         gallery_files = st.file_uploader(
             "Veya Galeriden Fotoğraflar Seçin (Çoklu Seçebilirsiniz)", 
             type=["jpg", "jpeg", "png"], 
@@ -254,7 +232,6 @@ else:
             key=f"gallery_{st.session_state.uploader_key}"
         )
         
-        # Dosyaları tek bir havuzda birleştiriyoruz
         files_to_upload = []
         if uploaded_file is not None:
             files_to_upload.append(uploaded_file)
@@ -273,10 +250,7 @@ else:
                         success_count = 0
                         
                         for idx, active_file in enumerate(files_to_upload):
-                            # Her dosyanın byte verisini bağımsız okuyoruz (Kopyalama / Klonlama koruması)
                             file_bytes = active_file.read()
-                            
-                            # Her dosyaya benzersiz zaman damgası ve milisaniye ekleniyor
                             unique_id = int(time.time() * 1000) + idx
                             file_name = f"dugun_{unique_id}.jpg"
                             
@@ -295,23 +269,25 @@ else:
                                 fields='id'
                             ).execute()
                             
-                            # 2. AI VERİTABANINA YAZMA
+                            # 2. AI VERİTABANINA YAZMA (Yüz tanımlama verisiyle birlikte)
+                            # Fotoğraftaki yüz kodlamalarını (encoding) hesaplıyoruz
+                            temp_io = io.BytesIO(file_bytes)
+                            loaded_image = face_recognition.load_image_file(temp_io)
+                            face_encodings = face_recognition.face_encodings(loaded_image)
+                            
                             new_record = {
                                 "name": file_name,
                                 "bytes": file_bytes,
+                                "encodings": face_encodings, # 🌟 Gerçek yüz kodlamaları
                                 "uploaded_by": st.session_state.user_name,
                                 "timestamp": datetime.datetime.now()
                             }
                             st.session_state.db.append(new_record)
                             success_count += 1
                         
-                        # Toplu veritabanı kaydı
                         save_db(st.session_state.db)
-                        
-                        # Başarılı yüklemeden sonra widget hafızasını sıfırlıyoruz:
                         st.session_state.uploader_key = str(int(time.time() * 1000))
                         
-                        # 🌟 Tebrik Kartı Efekti
                         st.markdown(f"""
                             <div style="background: rgba(255, 255, 255, 0.95); border-radius: 20px; padding: 20px; text-align: center; border: 2px solid #D98880; box-shadow: 0 10px 25px rgba(217, 136, 128, 0.2); margin-top: 15px;">
                                 <span style="font-size: 3rem;">🎉</span>
@@ -321,7 +297,6 @@ else:
                         """, unsafe_allow_html=True)
                         st.balloons()
                         
-                        # Sayfayı tazeleyip widget'ları tamamen sıfırlıyoruz:
                         time.sleep(1.5)
                         st.rerun()
                         
@@ -340,29 +315,85 @@ else:
         
         if camera_img:
             selfie_bytes = camera_img.read()
-            with st.spinner("Tüm albüm taranıyor..."):
-                if st.session_state.db:
-                    valid_photos = [item["bytes"] for item in st.session_state.db if isinstance(item, dict) and "bytes" in item]
-                    if valid_photos:
-                        st.success(f"📸 Sizin olduğunuz {len(valid_photos)} anı yakalandı!")
+            drive_service = get_drive_service()
+            
+            if drive_service is not None:
+                with st.spinner("Drive ile eşitleme yapılıyor ve albüm taranıyor... ⏳"):
+                    try:
+                        # 1. 🌟 DRIVE SENKRONİZASYONU (Silinenleri Veritabanından Atıyoruz)
+                        results = drive_service.files().list(
+                            q=f"'{DRIVE_FOLDER_ID}' in parents and trashed = false",
+                            fields="files(name)"
+                        ).execute()
+                        drive_files = results.get('files', [])
+                        # Güncel dosya isimlerini set yapıyoruz
+                        drive_file_names = {file['name'] for file in drive_files}
                         
-                        for idx, photo_bytes in enumerate(valid_photos):
-                            photo_b64 = base64.b64encode(photo_bytes).decode()
+                        # database.pkl'i güncelle (Drive'da yoksa sil)
+                        synced_db = [
+                            item for item in st.session_state.db 
+                            if isinstance(item, dict) and item.get("name") in drive_file_names
+                        ]
+                        
+                        # Eğer veritabanı değiştiyse kaydet
+                        if len(synced_db) != len(st.session_state.db):
+                            st.session_state.db = synced_db
+                            save_db(st.session_state.db)
+                        
+                        # 2. 🌟 GERÇEK YÜZ TARAMA SÜRECİ
+                        # Giriş yapılan selfienin yüz kodlamasını alıyoruz
+                        selfie_io = io.BytesIO(selfie_bytes)
+                        selfie_image = face_recognition.load_image_file(selfie_io)
+                        selfie_encodings = face_recognition.face_encodings(selfie_image)
+                        
+                        if len(selfie_encodings) > 0:
+                            target_encoding = selfie_encodings[0]
+                            matched_photos = []
                             
-                            st.markdown(f'<img src="data:image/jpeg;base64,{photo_b64}" class="ai-found-photo">', unsafe_allow_html=True)
+                            # Veritabanındaki güncel fotoğrafları tek tek analiz ediyoruz
+                            for item in st.session_state.db:
+                                if not isinstance(item, dict) or "bytes" not in item:
+                                    continue
+                                    
+                                # Eğer fotoğrafta önceden hesaplanmış yüz kodlaması yoksa şimdi hesaplayıp kaydedelim
+                                if "encodings" not in item or not item["encodings"]:
+                                    img_io = io.BytesIO(item["bytes"])
+                                    loaded_img = face_recognition.load_image_file(img_io)
+                                    item["encodings"] = face_recognition.face_encodings(loaded_img)
+                                    save_db(st.session_state.db)
+                                
+                                # Fotoğraftaki her yüzü kullanıcının yüzüyle karşılaştırıyoruz
+                                for face_enc in item["encodings"]:
+                                    # 0.50 tolerans eşleşme doğruluğunu artırır (düşük sayı = daha seçici/doğru)
+                                    match = face_recognition.compare_faces([face_enc], target_encoding, tolerance=0.50)
+                                    if match[0]:
+                                        matched_photos.append(item["bytes"])
+                                        break  # Bir eşleşme yeterli
                             
-                            st.download_button(
-                                label="📥 Fotoğrafı İndir",
-                                data=photo_bytes,
-                                file_name=f"mustafa_dilruba_dugun_{idx+1}.jpg",
-                                mime="image/jpeg",
-                                key=f"download_{idx}"
-                            )
-                            st.write("---")
-                    else:
-                        st.info("Albümde henüz geçerli bir fotoğraf bulunamadı.")
-                else:
-                    st.info("Albümde henüz fotoğraf bulunamadı. Önce 'Fotoğraf At' kısmından bir şeyler yükleyin.")
+                            # 3. 🌟 SONUÇLARI GÖSTERME
+                            if matched_photos:
+                                st.success(f"📸 Sizin olduğunuz {len(matched_photos)} anı yakalandı!")
+                                for idx, photo_bytes in enumerate(matched_photos):
+                                    photo_b64 = base64.b64encode(photo_bytes).decode()
+                                    st.markdown(f'<img src="data:image/jpeg;base64,{photo_b64}" class="ai-found-photo">', unsafe_allow_html=True)
+                                    
+                                    st.download_button(
+                                        label="📥 Fotoğrafı İndir",
+                                        data=photo_bytes,
+                                        file_name=f"mustafa_dilruba_dugun_{idx+1}.jpg",
+                                        mime="image/jpeg",
+                                        key=f"download_{idx}"
+                                    )
+                                    st.write("---")
+                            else:
+                                st.info("Albümde size ait bir fotoğraf bulunamadı. Başka bir açıyla poz vermeyi deneyebilirsiniz!")
+                        else:
+                            st.warning("⚠️ Çekilen fotoğrafta net bir yüz algılanamadı. Lütfen daha aydınlık bir ortamda tekrar deneyin.")
+                            
+                    except Exception as e:
+                        st.error(f"Eşitleme/Tarama hatası: {e}")
+            else:
+                st.error("❌ Google Drive bağlantısı kurulamadı.")
         st.markdown('</div>', unsafe_allow_html=True)
 
     # 📋 PROGRAM SAYFASI
