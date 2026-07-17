@@ -76,33 +76,36 @@ if valid_images:
 else:
     active_bg_image = None
 
-# --- CSS YAPILANDIRMASI (TAMAMEN MOBİL VE PERFORMANS ODAKLI) ---
+# --- CSS YAPILANDIRMASI (TAMAMEN MOBİL, SIFIR BOŞLUK VE EN ARKA PLAN ODAKLI) ---
 st.markdown(f"""
     <style>
-    /* 📱 Streamlit katmanlarını tamamen transparan yapıp arkadaki resmi görünür kılıyoruz */
+    /* 📱 Streamlit'in tüm mobil katmanlarındaki beyaz/gri arka planları tamamen transparan yapıyoruz */
     [data-testid="stAppViewContainer"], .stApp, [data-testid="stApp"], 
-    [data-testid="stMainBlockContainer"], .main, .block-container, [data-testid="stHeader"] {{
+    [data-testid="stMainBlockContainer"], .main, .block-container {{
         background: transparent !important;
         background-color: transparent !important;
         box-shadow: none !important;
     }}
     
+    /* 🚫 Üstteki o beyaz boş barı ve header alanını tamamen yok ediyoruz */
+    [data-testid="stHeader"], header, footer, [data-testid="stDecoration"] {{
+        display: none !important;
+        visibility: hidden !important;
+        height: 0px !important;
+    }}
+    
+    /* 📱 Tepe boşluklarını sıfırlayarak beyaz barın yerini tamamen kapatıyoruz */
     [data-testid="stMainBlockContainer"] {{
         position: relative;
         z-index: 10;
+        padding-top: 5px !important; /* Beyaz barı yok etmek için tepe boşluğu sıfırlandı */
         padding-bottom: 140px !important;
-        padding-top: 20px !important;
         margin: 0px !important;
     }}
     
     html, body, div[data-testid="stVerticalBlock"] {{
         background: transparent !important;
         background-color: transparent !important;
-    }}
-    
-    footer, header, [data-testid="stHeader"], [data-testid="stDecoration"] {{
-        display: none !important;
-        visibility: hidden !important;
     }}
     
     div[data-testid="stForm"], .stFileUploader, [data-baseweb="file-uploader"], 
@@ -114,8 +117,8 @@ st.markdown(f"""
     }}
     
     /* 🔴 OKUNAKLI PASTEL KIRMIZI METİNLER VE ARKA PLAN GÖLGELERİ */
-    .main-title {{ font-family: 'Playfair Display', serif; color: #D98880 !important; text-align: center; font-size: 2.4rem !important; font-weight: 800 !important; margin-top: 20px; text-shadow: 2px 2px 4px rgba(255,255,255,1), -2px -2px 4px rgba(255,255,255,1); }}
-    .top-subtitle {{ text-align: center; color: #D98880 !important; font-size: 1.3rem !important; font-style: italic; margin-bottom: 30px; font-weight: 700; text-shadow: 2px 2px 4px rgba(255,255,255,1), -2px -2px 4px rgba(255,255,255,1); }}
+    .main-title {{ font-family: 'Playfair Display', serif; color: #D98880 !important; text-align: center; font-size: 2.4rem !important; font-weight: 800 !important; margin-top: 10px; text-shadow: 2px 2px 4px rgba(255,255,255,1), -2px -2px 4px rgba(255,255,255,1); }}
+    .top-subtitle {{ text-align: center; color: #D98880 !important; font-size: 1.3rem !important; font-style: italic; margin-bottom: 20px; font-weight: 700; text-shadow: 2px 2px 4px rgba(255,255,255,1), -2px -2px 4px rgba(255,255,255,1); }}
     .card-title {{ color: #D98880 !important; font-weight: 800 !important; text-align: center; font-size: 1.6rem !important; margin-bottom: 20px; }}
     .couple-message {{ font-family: 'Georgia', serif; color: #D98880 !important; text-align: center; font-size: 1.25rem !important; font-style: italic; background-color: rgba(255, 255, 255, 0.98) !important; padding: 22px; border-radius: 15px; border-left: 6px solid #D98880; margin-bottom: 25px; font-weight: 600; line-height: 1.7; }}
     
@@ -153,23 +156,32 @@ st.markdown(f"""
     .mobile-nav-bar div.stButton > button {{ background: transparent !important; border: none !important; box-shadow: none !important; height: auto !important; padding: 4px 0 !important; margin: 0 !important; display: block !important; text-align: center !important; }}
     .mobile-nav-bar div.stButton > button p, .mobile-nav-bar div.stButton > button span {{ color: #7D4643 !important; font-size: 1.05rem !important; font-weight: 800 !important; }}
     
-    /* 📱 Görselin altına binen sabit maske */
+    /* 📱 Görselin altına binen sabit yarı saydam maske */
     .bg-mask {{
         position: fixed;
         top: 0; left: 0; width: 100vw; height: 100vh;
         background-color: rgba(255, 254, 253, 0.45) !important;
-        z-index: -1;
+        z-index: -10;
+    }}
+    
+    /* 🌟 FOTOĞRAFI EKRANIN EN ARKASINA ÇİVİLEYEN CSS */
+    [data-testid="stImage"], [data-testid="stImage"] img, img {{
+        position: fixed !important;
+        top: 0 !important;
+        left: 0 !important;
+        width: 100vw !important;
+        height: 100vh !important;
+        object-fit: cover !important;
+        z-index: -9999 !important;
+        pointer-events: none !important;
     }}
     </style>
 """, unsafe_allow_html=True)
 
-# 🌟 ARKA PLAN GÖRSELİNİN YEREL RENDER MOTORU (Zorla arka katmana çiviliyoruz)
+# 🌟 ARKA PLAN GÖRSELİNİN YEREL RENDER MOTORU (Arka katmana zorla kilitlendi)
 if active_bg_image:
-    # Resim enjekte ediliyor
     st.image(active_bg_image, use_container_width=True)
-    # Maske katmanı yerleştiriliyor
     st.markdown('<div class="bg-mask"></div>', unsafe_allow_html=True)
-    
     # Görseli CSS ile ekran boyutunda sabit arka plan katmanı haline getiriyoruz:
     st.markdown(f"""
         <style>
