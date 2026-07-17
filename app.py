@@ -43,19 +43,74 @@ def get_drive_service():
             
     return build('drive', 'v3', credentials=creds)
 
-# --- GLOBAL ORTAK VERİTABANI MOTORU ---
-DB_FILE = "database.pkl"
-def load_db():
-    if os.path.exists(DB_FILE):
-        with open(DB_FILE, 'rb') as f:
-            try: return pickle.load(f)
-            except: return []
-    return []
+# --- 🌟 ORTAK BULUT VERİTABANI MOTORU (GOOGLE DRIVE INTEGRATED) ---
+DB_FILE_NAME = "database.pkl"
 
-def save_db(db_data):
-    with open(DB_FILE, 'wb') as f: pickle.dump(db_data, f)
+def get_db_file_id(drive_service):
+    """Google Drive'da database.pkl dosyasının ID'sini bulur, yoksa oluşturur."""
+    try:
+        results = drive_service.files().list(
+            q=f"'{DRIVE_FOLDER_ID}' in parents and name = '{DB_FILE_NAME}' and trashed = false",
+            fields="files(id)"
+        ).execute()
+        files = results.get('files', [])
+        if files:
+            return files[0]['id']
+        return None
+    except:
+        return None
 
-if "db" not in st.session_state: st.session_state.db = load_db()
+def download_global_db(drive_service):
+    """Google Drive'dan database.pkl dosyasını çeker ve yükler."""
+    file_id = get_db_file_id(drive_service)
+    if not file_id:
+        return [] # Henüz dosya oluşturulmamışsa boş liste dön
+    
+    try:
+        request = drive_service.files().get_media(fileId=file_id)
+        file_io = io.BytesIO()
+        downloader = MediaIoBaseDownload(file_io, request)
+        done = False
+        while not done:
+            status, done = downloader.next_chunk()
+        
+        file_io.seek(0)
+        return pickle.load(file_io)
+    except Exception as e:
+        # Bozuk piksel veya okuma hatası durumunda boş veri dön
+        return []
+
+def upload_global_db(drive_service, db_data):
+    """database.pkl verilerini Google Drive'a yükler veya günceller."""
+    try:
+        file_io = io.BytesIO()
+        pickle.dump(db_data, file_io)
+        file_io.seek(0)
+        
+        file_id = get_db_file_id(drive_service)
+        
+        media = MediaIoBaseUpload(file_io, mimetype='application/octet-stream', resumable=True)
+        
+        if file_id:
+            # Varsa güncelle
+            drive_service.files().update(
+                fileId=file_id,
+                media_body=media
+            ).execute()
+        else:
+            # Yoksa sıfırdan oluştur
+            file_metadata = {
+                'name': DB_FILE_NAME,
+                'parents': [DRIVE_FOLDER_ID]
+            }
+            drive_service.files().create(
+                body=file_metadata,
+                media_body=media
+            ).execute()
+    except Exception as e:
+        st.error(f"Global veritabanı senkronize edilemedi: {e}")
+
+# --- SEANS YAPILANDIRMASI ---
 if "user_name" not in st.session_state: st.session_state.user_name = ""
 if "active_page" not in st.session_state: st.session_state.active_page = "home"
 if "upload_method" not in st.session_state: st.session_state.upload_method = "camera"
@@ -284,6 +339,9 @@ else:
                         from googleapiclient.http import MediaIoBaseUpload
                         import io
                         
+                        # 🌟 Google Drive'daki ortak global veritabanını canlı olarak indiriyoruz
+                        global_db = download_global_db(drive_service)
+                        
                         success_count = 0
                         
                         for idx, active_file in enumerate(files_to_upload):
@@ -310,18 +368,20 @@ else:
                             biyometric_identity = extract_pure_biyometric_vector(file_bytes)
                             identity_list = biyometric_identity.tolist() if biyometric_identity is not None else None
                             
-                            # 2. VERİTABANI DOSYASINA (database.pkl) MÜHÜRLÜYORUZ
+                            # 2. GLOBAL VERİTABANINA ekliyoruz (Görsel byte'larını Drive'da yer kaplamaması için buraya gömmüyoruz, sadece ID'sini tutuyoruz!)
                             new_record = {
                                 "name": file_name,
-                                "drive_id": uploaded_drive_file.get('id'), # Canlı id
+                                "drive_id": uploaded_drive_file.get('id'),
                                 "biyometric_identity": identity_list,
                                 "uploaded_by": st.session_state.user_name,
                                 "timestamp": datetime.datetime.now()
                             }
-                            st.session_state.db.append(new_record)
+                            global_db.append(new_record)
                             success_count += 1
                         
-                        save_db(st.session_state.db)
+                        # 🌟 Ortak güncel veritabanını Google Drive'a geri yüklüyoruz
+                        upload_global_db(drive_service, global_db)
+                        
                         st.session_state.uploader_key = str(int(time.time() * 1000))
                         
                         st.markdown(f"""
@@ -341,7 +401,7 @@ else:
             else:
                 st.error("❌ Google Drive bağlantısı şu an kurulamıyor! Lütfen 'token.pickle' dosyasını kontrol edin.")
 
-    # 🔍 YAPAY ZEKA FOTOĞRAP ARAMA MOTORU (LOKAL VE HIZLI BULUT SENKRONİZASYON SÜRÜMÜ)
+    # 🔍 YAPAY ZEKA FOTOĞRAP ARAMA MOTORU (ORTAK BULUT VERİTABANI SÜRÜMÜ)
     elif st.session_state.active_page == "find_me":
         st.markdown('<div class="glass-card">', unsafe_allow_html=True)
         st.markdown('<h3 class="card-title">🔍 Yapay Zeka ile Kendini Bul</h3>', unsafe_allow_html=True)
@@ -354,9 +414,9 @@ else:
             drive_service = get_drive_service()
             
             if drive_service is not None:
-                with st.spinner("Akıllı veri senkronizasyonu yapılıyor... ⏳"):
+                with st.spinner("Bulut veritabanı eşitleniyor ve akıllı yüz analizi yapılıyor... ⏳"):
                     try:
-                        # 1. GOOGLE DRIVE'DAKI GÜNCEL RESİMLERİN ADLARINI ALALIM (Çok hızlı, indirmez!)
+                        # 1. GOOGLE DRIVE'DAKI GÜNCEL RESİMLERİN ADLARINI ALALIM
                         results = drive_service.files().list(
                             q=f"'{DRIVE_FOLDER_ID}' in parents and trashed = false and mimeType = 'image/jpeg'",
                             fields="files(id, name)"
@@ -367,16 +427,19 @@ else:
                         drive_file_names = {file['name'] for file in drive_files}
                         drive_id_map = {file['name']: file['id'] for file in drive_files}
                         
-                        # 🌟 CANLI SİLME KORUMASI: Drive'dan silinenleri veritabanından siliyoruz
+                        # 🌟 Canlı olarak Google Drive'daki ORTAK veritabanını (database.pkl) indiriyoruz
+                        global_db = download_global_db(drive_service)
+                        
+                        # Canlı Silme Koruması: Drive'dan el ile silinen dosyaları global veritabanından da eliyoruz
                         synced_db = [
-                            item for item in st.session_state.db 
+                            item for item in global_db 
                             if isinstance(item, dict) and item.get("name") in drive_file_names
                         ]
                         
-                        # Eğer veritabanı değiştiyse anında diske mühürle
-                        if len(synced_db) != len(st.session_state.db):
-                            st.session_state.db = synced_db
-                            save_db(st.session_state.db)
+                        # Eğer veritabanında silinen olmuşsa, güncel halini Google Drive'a geri yazıyoruz
+                        if len(synced_db) != len(global_db):
+                            global_db = synced_db
+                            upload_global_db(drive_service, global_db)
                         
                         # 2. BİYOMETRİK ÖZNİTELİK KARŞILAŞTIRMASI (Hızlıca bellek üzerinden çalışır!)
                         selfie_identity = extract_pure_biyometric_vector(selfie_bytes)
@@ -384,7 +447,7 @@ else:
                         if selfie_identity is not None:
                             matched_records = []
                             
-                            for item in st.session_state.db:
+                            for item in global_db:
                                 if not isinstance(item, dict) or "biyometric_identity" not in item:
                                     continue
                                     
@@ -396,28 +459,25 @@ else:
                                     saved_ident_array = np.array(item["biyometric_identity"])
                                     distance = compare_biyometric_vectors(selfie_identity, saved_ident_array)
                                     
-                                    # Cosine distance tolerans eşiği
+                                    # Cosine distance tolerans eşiği (0.28 düğün ortamı ışığı için en isabetlisidir)
                                     if distance < 0.28:
                                         matched_records.append(item)
                             
-                            # 3. YALNIZCA EŞLEŞEN GÖRSELLERİ İNDİR (Broken pipe'ı %100 çözen nokta!)
+                            # 3. YALNIZCA EŞLEŞEN GÖRSELLERİ DOĞRUDAN GOOGLE DRIVE'DAN İNDİRİP GÖSTERİYORUZ
                             if matched_records:
-                                st.success(f"🎉 Sizin olduğunuz {len(matched_records)} fotoğraf bulundu!")
+                                st.success(f"🎉 Sizin olduğunuz {len(matched_records)} fotoğraf bulut albümünden yakalandı!")
                                 
                                 for idx, item in enumerate(matched_records):
                                     file_id = item.get("drive_id")
                                     
-                                    # Eğer yerel cache üzerinde "bytes" verisi silinmişse canlı ve tekil olarak indiriyoruz
-                                    if "bytes" not in item or not item["bytes"]:
-                                        request = drive_service.files().get_media(fileId=file_id)
-                                        file_io = io.BytesIO()
-                                        downloader = MediaIoBaseDownload(file_io, request)
-                                        done = False
-                                        while not done:
-                                            status, done = downloader.next_chunk()
-                                        photo_bytes = file_io.getvalue()
-                                    else:
-                                        photo_bytes = item["bytes"]
+                                    # Canlı ve tekil olarak indiriyoruz (Sadece eşleşenleri indirdiğimiz için asla bağlantı kopmaz!)
+                                    request = drive_service.files().get_media(fileId=file_id)
+                                    file_io = io.BytesIO()
+                                    downloader = MediaIoBaseDownload(file_io, request)
+                                    done = False
+                                    while not done:
+                                        status, done = downloader.next_chunk()
+                                    photo_bytes = file_io.getvalue()
                                         
                                     photo_b64 = base64.b64encode(photo_bytes).decode()
                                     st.markdown(f'<img src="data:image/jpeg;base64,{photo_b64}" class="ai-found-photo">', unsafe_allow_html=True)
@@ -431,7 +491,7 @@ else:
                                     )
                                     st.write("---")
                             else:
-                                st.info("Bulut albümünde size ait bir fotoğraf bulunamadı. Başka bir açıyla tekrar poz vermeyi deneyebilirsiniz!")
+                                st.info("Düğün albümünde size ait bir fotoğraf bulunamadı. Başka bir açıyla tekrar poz vermeyi deneyebilirsiniz!")
                         else:
                             st.warning("⚠️ Biyometrik analiz başarısız oldu. Lütfen daha aydınlık bir ortamda tekrar poz verin.")
                             
