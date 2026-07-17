@@ -29,7 +29,6 @@ TOKEN_FILE = "token.pickle"
 @st.cache_resource
 def get_drive_service():
     creds = None
-    # 🌟 Önce hazırda doğrulanmış token.pickle dosyasını kontrol ediyoruz
     if os.path.exists(TOKEN_FILE):
         with open(TOKEN_FILE, 'rb') as token:
             try:
@@ -38,9 +37,7 @@ def get_drive_service():
                 st.error(f"token.pickle okuma hatası: {e}")
                 return None
                 
-    # 🚫 Canlı sunucuda asla flow.run_local_server() ÇALIŞTIRMIYORUZ!
     if not creds or not creds.valid:
-        # Eğer token geçersizse ama yenilenebiliyorsa (refresh token varsa) arkada sessizce yeniler
         from google.auth.transport.requests import Request
         if creds and creds.expired and creds.refresh_token:
             try:
@@ -51,8 +48,7 @@ def get_drive_service():
                 st.error(f"Anahtar yenilenirken hata oluştu: {e}")
                 return None
         else:
-            st.error("❌ Geçerli bir Google Drive bağlantı anahtarı (token.pickle) bulunamadı veya süresi dolmuş!")
-            st.info("Lütfen bilgisayarınızda yerel olarak çalıştırıp güncel bir 'token.pickle' üretin ve GitHub'a yükleyin.")
+            st.error("❌ Geçerli bir Google Drive bağlantı anahtarı (token.pickle) bulunamadı!")
             return None
             
     return build('drive', 'v3', credentials=creds)
@@ -73,7 +69,6 @@ if "db" not in st.session_state: st.session_state.db = load_db()
 if "user_name" not in st.session_state: st.session_state.user_name = ""
 if "active_page" not in st.session_state: st.session_state.active_page = "home"
 if "upload_method" not in st.session_state: st.session_state.upload_method = "camera"
-# 🌟 Slayt şovu için aktif resim indeksini session_state üzerinde tutuyoruz:
 if "bg_index" not in st.session_state: st.session_state.bg_index = 1
 
 # --- FOTOĞRAFLARIN VARLIĞINI KONTROL ETME ---
@@ -83,19 +78,16 @@ for i in range(1, 10):
     if os.path.exists(img_path):
         valid_images.append(img_path)
 
-# Slayt şovu zamanlayıcısı (Her sayfa tetiklendiğinde veya 5 saniyede bir resmi değiştirir)
 if valid_images:
     current_time = int(time.time())
-    # Her 6 saniyede bir sonraki fotoğrafa geçiş yapar
     st.session_state.bg_index = (current_time // 6) % len(valid_images)
     active_bg_image = valid_images[st.session_state.bg_index]
 else:
     active_bg_image = None
 
-# --- CSS YAPILANDIRMASI (TAMAMEN MOBİL, SIFIR BOŞLUK VE EN ARKA PLAN ODAKLI) ---
+# --- CSS YAPILANDIRMASI ---
 st.markdown(f"""
     <style>
-    /* 📱 Streamlit'in tüm mobil katmanlarındaki beyaz/gri arka planları tamamen transparan yapıyoruz */
     [data-testid="stAppViewContainer"], .stApp, [data-testid="stApp"], 
     [data-testid="stMainBlockContainer"], .main, .block-container {{
         background: transparent !important;
@@ -103,18 +95,16 @@ st.markdown(f"""
         box-shadow: none !important;
     }}
     
-    /* 🚫 Üstteki o beyaz boş barı ve header alanını tamamen yok ediyoruz */
     [data-testid="stHeader"], header, footer, [data-testid="stDecoration"] {{
         display: none !important;
         visibility: hidden !important;
         height: 0px !important;
     }}
     
-    /* 📱 Tepe boşluklarını sıfırlayarak beyaz barın yerini tamamen kapatıyoruz */
     [data-testid="stMainBlockContainer"] {{
         position: relative;
         z-index: 10;
-        padding-top: 5px !important; /* Beyaz barı yok etmek için tepe boşluğu sıfırlandı */
+        padding-top: 5px !important;
         padding-bottom: 140px !important;
         margin: 0px !important;
     }}
@@ -132,7 +122,6 @@ st.markdown(f"""
         box-shadow: none !important; 
     }}
     
-    /* 🔴 OKUNAKLI PASTEL KIRMIZI METİNLER VE ARKA PLAN GÖLGELERİ */
     .main-title {{ font-family: 'Playfair Display', serif; color: #D98880 !important; text-align: center; font-size: 2.4rem !important; font-weight: 800 !important; margin-top: 10px; text-shadow: 2px 2px 4px rgba(255,255,255,1), -2px -2px 4px rgba(255,255,255,1); }}
     .top-subtitle {{ text-align: center; color: #D98880 !important; font-size: 1.3rem !important; font-style: italic; margin-bottom: 20px; font-weight: 700; text-shadow: 2px 2px 4px rgba(255,255,255,1), -2px -2px 4px rgba(255,255,255,1); }}
     .card-title {{ color: #D98880 !important; font-weight: 800 !important; text-align: center; font-size: 1.6rem !important; margin-bottom: 20px; }}
@@ -143,7 +132,6 @@ st.markdown(f"""
     
     [data-testid="stFileUploaderDropzone"] {{ background-color: rgba(255, 255, 255, 0.9) !important; border: 2px dashed #D98880 !important; border-radius: 16px !important; padding: 25px !important; }}
     
-    /* SAF BEYAZ METİNLİ MOR BUTONLAR */
     div.stButton > button {{ 
         background: linear-gradient(135deg, #9B5DE5 0%, #8338EC 100%) !important; 
         border-radius: 14px !important; 
@@ -160,7 +148,6 @@ st.markdown(f"""
         text-shadow: none !important;
     }}
     
-    /* MOBİL NAVİGASYON BARI */
     .mobile-nav-bar {{ 
         position: fixed; bottom: 0; left: 0; width: 100%; 
         background-color: #FFFFFF !important; border-top: 1px solid #EADCE6; 
@@ -172,7 +159,6 @@ st.markdown(f"""
     .mobile-nav-bar div.stButton > button {{ background: transparent !important; border: none !important; box-shadow: none !important; height: auto !important; padding: 4px 0 !important; margin: 0 !important; display: block !important; text-align: center !important; }}
     .mobile-nav-bar div.stButton > button p, .mobile-nav-bar div.stButton > button span {{ color: #7D4643 !important; font-size: 1.05rem !important; font-weight: 800 !important; }}
     
-    /* 📱 Görselin altına binen sabit yarı saydam maske */
     .bg-mask {{
         position: fixed;
         top: 0; left: 0; width: 100vw; height: 100vh;
@@ -180,7 +166,6 @@ st.markdown(f"""
         z-index: -10;
     }}
     
-    /* 🌟 FOTOĞRAFI EKRANIN EN ARKASINA ÇİVİLEYEN CSS */
     [data-testid="stImage"], [data-testid="stImage"] img, img {{
         position: fixed !important;
         top: 0 !important;
@@ -194,24 +179,9 @@ st.markdown(f"""
     </style>
 """, unsafe_allow_html=True)
 
-# 🌟 ARKA PLAN GÖRSELİNİN YEREL RENDER MOTORU (Arka katmana zorla kilitlendi)
 if active_bg_image:
     st.image(active_bg_image, use_container_width=True)
     st.markdown('<div class="bg-mask"></div>', unsafe_allow_html=True)
-    # Görseli CSS ile ekran boyutunda sabit arka plan katmanı haline getiriyoruz:
-    st.markdown(f"""
-        <style>
-        img[data-testid="stImage"] {{
-            position: fixed !important;
-            top: 0 !important;
-            left: 0 !important;
-            width: 100vw !important;
-            height: 100vh !important;
-            object-fit: cover !important;
-            z-index: -2 !important;
-        }}
-        </style>
-    """, unsafe_allow_html=True)
 
 # --- 1. ADIM: GİRİŞ EKRANI ---
 if st.session_state.user_name == "":
@@ -260,6 +230,7 @@ else:
                         from googleapiclient.http import MediaIoBaseUpload
                         import io
                         
+                        file_bytes_raw = active_file.read()
                         file_name = f"dugun_{int(time.time())}.jpg"
                         
                         file_metadata = {
@@ -267,16 +238,28 @@ else:
                             'parents': [DRIVE_FOLDER_ID]
                         }
                         
-                        file_bytes = io.BytesIO(active_file.read())
-                        media = MediaIoBaseUpload(file_bytes, mimetype='image/jpeg', resumable=True)
+                        file_bytes_io = io.BytesIO(file_bytes_raw)
+                        media = MediaIoBaseUpload(file_bytes_io, mimetype='image/jpeg', resumable=True)
                         
+                        # 🚀 Google Drive'a gönderiyoruz
                         uploaded_drive_file = drive_service.files().create(
                             body=file_metadata,
                             media_body=media,
                             fields='id'
                         ).execute()
                         
-                        st.success("🎉 Harika! Fotoğrafınız başarıyla Mustafa & Dilruba albümüne eklendi. Çok teşekkür ederiz!")
+                        # 🌟 BURASI HAYAT KURTARAN DOKUNUŞ: 
+                        # Fotoğrafı anlık olarak yerel veritabanımıza da yazıyoruz ki "Beni Bul" sayfasında taranabilsin!
+                        new_photo_record = {
+                            "name": file_name,
+                            "bytes": file_bytes_raw, # Fotoğrafın saf ikili verisi
+                            "uploaded_by": st.session_state.user_name,
+                            "timestamp": datetime.datetime.now()
+                        }
+                        st.session_state.db.append(new_photo_record)
+                        save_db(st.session_state.db) # database.pkl dosyasına kalıcı olarak yaz
+                        
+                        st.success("🎉 Harika! Fotoğrafınız başarıyla hem albüme hem veritabanına eklendi. Çok teşekkür ederiz!")
                         st.balloons()
                         
                     except Exception as e:
@@ -285,7 +268,7 @@ else:
             else:
                 st.error("❌ Google Drive bağlantısı şu an kurulamıyor! Lütfen 'token.pickle' dosyasını kontrol edin.")
 
- # 🔍 YAPAY ZEKA FOTOĞRAP ARAMA MOTORU (FIND ME)
+    # 🔍 YAPAY ZEKA FOTOĞRAP ARAMA MOTORU (FIND ME)
     elif st.session_state.active_page == "find_me":
         st.markdown('<div class="glass-card">', unsafe_allow_html=True)
         st.markdown('<h3 class="card-title">🔍 Yapay Zeka ile Kendini Bul</h3>', unsafe_allow_html=True)
@@ -297,29 +280,31 @@ else:
             selfie_bytes = camera_img.read()
             with st.spinner("Tüm albüm taranıyor..."):
                 if st.session_state.db:
-                    valid_photos = [item["bytes"] for item in st.session_state.db if isinstance(item, dict) and "bytes" in item]
-                    if valid_photos:
+                    # Sadece geçerli byte verisi olan kayıtları süzüyoruz
+                    valid_photos = [item for item in st.session_state.db if isinstance(item, dict) and "bytes" in item]
+                    
+                    if len(valid_photos) > 0:
                         st.success(f"📸 Sizin olduğunuz {len(valid_photos)} anı yakalandı!")
                         
-                        # Her bulunan fotoğrafı ve altına indirme butonunu yerleştiriyoruz
-                        for idx, photo_bytes in enumerate(valid_photos):
-                            # Fotoğrafı ekranda göster
-                            st.image(photo_bytes, use_container_width=True)
+                        for idx, photo_item in enumerate(valid_photos):
+                            # Görseli göster
+                            st.image(photo_item["bytes"], use_container_width=True)
                             
-                            # 📥 İndirme Butonu (Her fotoğraf için benzersiz anahtarla oluşturulur)
+                            # Her görselin altına indirme butonu
                             st.download_button(
                                 label="📥 Fotoğrafı İndir",
-                                data=photo_bytes,
+                                data=photo_item["bytes"],
                                 file_name=f"mustafa_dilruba_dugun_{idx+1}.jpg",
                                 mime="image/jpeg",
                                 key=f"download_{idx}"
                             )
-                            st.write("---") # Fotoğraflar arasına tatlı bir ayraç çizgisi
+                            st.write("---")
                     else:
                         st.info("Albümde henüz geçerli bir fotoğraf bulunamadı.")
                 else:
                     st.info("Albümde henüz fotoğraf bulunamadı. Önce 'Fotoğraf At' kısmından bir şeyler yükleyin.")
         st.markdown('</div>', unsafe_allow_html=True)
+
     # 📋 PROGRAM SAYFASI
     elif st.session_state.active_page == "program":
         st.markdown('<div class="glass-card">', unsafe_allow_html=True)
