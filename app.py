@@ -29,16 +29,32 @@ TOKEN_FILE = "token.pickle"
 @st.cache_resource
 def get_drive_service():
     creds = None
+    # 🌟 Önce hazırda doğrulanmış token.pickle dosyasını kontrol ediyoruz
     if os.path.exists(TOKEN_FILE):
         with open(TOKEN_FILE, 'rb') as token:
-            creds = pickle.load(token)
+            try:
+                creds = pickle.load(token)
+            except Exception as e:
+                st.error(f"token.pickle okuma hatası: {e}")
+                return None
+                
+    # 🚫 Canlı sunucuda asla flow.run_local_server() ÇALIŞTIRMIYORUZ!
     if not creds or not creds.valid:
-        from google_auth_oauthlib.flow import InstalledAppFlow
-        SCOPES = ['https://www.googleapis.com/auth/drive.file']
-        flow = InstalledAppFlow.from_client_secrets_file(CLIENT_SECRETS_FILE, SCOPES)
-        creds = flow.run_local_server(port=0)
-        with open(TOKEN_FILE, 'wb') as token:
-            pickle.dump(creds, token)
+        # Eğer token geçersizse ama yenilenebiliyorsa (refresh token varsa) arkada sessizce yeniler
+        from google.auth.transport.requests import Request
+        if creds Harold and creds.expired and creds.refresh_token:
+            try:
+                creds.refresh(Request())
+                with open(TOKEN_FILE, 'wb') as token:
+                    pickle.dump(creds, token)
+            except Exception as e:
+                st.error(f"Anahtar yenilenirken hata oluştu: {e}")
+                return None
+        else:
+            st.error("❌ Geçerli bir Google Drive bağlantı anahtarı (token.pickle) bulunamadı veya süresi dolmuş!")
+            st.info("Lütfen bilgisayarınızda yerel olarak çalıştırıp güncel bir 'token.pickle' üretin ve GitHub'a yükleyin.")
+            return None
+            
     return build('drive', 'v3', credentials=creds)
 
 # --- GEÇİCİ VERİTABANI MOTORU ---
